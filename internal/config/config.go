@@ -38,7 +38,7 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("loading %s: %w", path, err)
 	}
 
-	cfg.RecipeDir = expandTilde(cfg.RecipeDir)
+	cfg.RecipeDir = expandPath(cfg.RecipeDir)
 	return cfg, nil
 }
 
@@ -51,20 +51,21 @@ func LoadRecipe(recipeDir, name string) (Recipe, error) {
 		return r, fmt.Errorf("loading recipe %s: %w", path, err)
 	}
 
-	r.StartDirectory = expandTilde(r.StartDirectory)
+	r.StartDirectory = expandPath(r.StartDirectory)
 	return r, nil
 }
 
 func configDir() string {
 	if dir := os.Getenv("TWIN_CONFIG_DIR"); dir != "" {
-		return expandTilde(dir)
+		return expandPath(dir)
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "twin")
 }
 
-// expandTilde replaces a leading ~ with the user's home directory.
-func expandTilde(path string) string {
+// expandPath expands environment variables and a leading ~ in the path.
+func expandPath(path string) string {
+	path = os.ExpandEnv(path)
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, path[2:])
