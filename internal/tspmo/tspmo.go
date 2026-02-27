@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jdham/twin/internal/config"
-	"github.com/jdham/twin/internal/tmux"
+	"github.com/Josef-Hlink/twin/internal/config"
+	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
 // Run loads the config, reads active recipes, and creates tmux sessions.

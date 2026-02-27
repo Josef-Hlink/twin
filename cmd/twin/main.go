@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jdham/twin/internal/sybau"
-	"github.com/jdham/twin/internal/tspmo"
+	"github.com/Josef-Hlink/twin/internal/sybau"
+	"github.com/Josef-Hlink/twin/internal/tspmo"
 )
 
 func main() {

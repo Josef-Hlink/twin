@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/jdham/twin/internal/tmux"
+	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
 // Run launches a tmux popup containing the fzf session picker.
