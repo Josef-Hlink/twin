@@ -9,8 +9,39 @@ import (
 	"github.com/jdham/twin/internal/tmux"
 )
 
-// Run lists tmux sessions, lets the user pick one via fzf, and switches to it.
+// Run launches a tmux popup containing the fzf session picker.
 func Run() error {
+	sessions, err := tmux.ListSessions()
+	if err != nil {
+		return fmt.Errorf("listing sessions: %w", err)
+	}
+	if len(sessions) == 0 {
+		fmt.Println("no tmux sessions running")
+		return nil
+	}
+
+	height := len(sessions) + 4
+
+	// Width = longest session name + 5 (border + padding), minimum so "sybau" title fits.
+	width := len("sybau") + 5
+	for _, s := range sessions {
+		if w := len(s) + 5; w > width {
+			width = w
+		}
+	}
+
+	// Resolve absolute path so the popup's shell can find the binary.
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable path: %w", err)
+	}
+
+	return tmux.DisplayPopup("sybau", width, height, "fg=magenta bold", self+" sybau-picker")
+}
+
+// RunPicker lists tmux sessions, lets the user pick one via fzf, and switches to it.
+// It's meant to run inside a tmux popup spawned by Run.
+func RunPicker() error {
 	sessions, err := tmux.ListSessions()
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
