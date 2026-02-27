@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -49,4 +50,17 @@ func ListSessions() ([]string, error) {
 // SwitchClient switches the current tmux client to the named session.
 func SwitchClient(name string) error {
 	return exec.Command("tmux", "switch-client", "-t", name).Run()
+}
+
+// DisplayPopup opens a tmux popup anchored to the top-left corner.
+func DisplayPopup(title string, width, height int, style, command string) error {
+	return exec.Command("tmux", "display-popup",
+		"-T", title,
+		"-x", "0",
+		"-y", strconv.Itoa(height+1),
+		"-w", strconv.Itoa(width),
+		"-h", strconv.Itoa(height),
+		"-S", style,
+		"-E", command,
+	).Run()
 }

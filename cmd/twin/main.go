@@ -21,6 +21,8 @@ func main() {
 		err = tspmo.Run()
 	case "sybau":
 		err = sybau.Run()
+	case "sybau-picker":
+		err = sybau.RunPicker()
 	default:
 		printUsage()
 		os.Exit(1)
