@@ -22,10 +22,10 @@ func Run() error {
 
 	height := len(sessions) + 4
 
-	// Width = longest session name + 7 (border + padding), minimum so "sybau" title fits.
-	width := len("sybau") + 7
+	// Width = longest session name + 5 (border + padding), minimum so "sybau" title fits.
+	width := len("sybau") + 5
 	for _, s := range sessions {
-		if w := len(s) + 7; w > width {
+		if w := len(s) + 5; w > width {
 			width = w
 		}
 	}
