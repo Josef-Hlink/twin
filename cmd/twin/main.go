@@ -35,9 +35,11 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "usage: twin <command>")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "commands:")
-	fmt.Fprintln(os.Stderr, "  tspmo    spin up tmux sessions from recipes")
-	fmt.Fprintln(os.Stderr, "  sybau    fzf-based session switcher")
+	const usage = `usage: twin <command>
+
+commands:
+  tspmo    spin up tmux sessions from recipes
+  sybau    fzf-based session switcher
+`
+	fmt.Fprint(os.Stderr, usage)
 }
