@@ -55,6 +55,24 @@ func LoadRecipe(recipeDir, name string) (Recipe, error) {
 	return r, nil
 }
 
+// ListRecipes returns the names of all recipe files (without .toml extension)
+// found in the given directory.
+func ListRecipes(recipeDir string) ([]string, error) {
+	entries, err := os.ReadDir(recipeDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading recipe dir %s: %w", recipeDir, err)
+	}
+
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".toml") {
+			continue
+		}
+		names = append(names, strings.TrimSuffix(e.Name(), ".toml"))
+	}
+	return names, nil
+}
+
 func configDir() string {
 	if dir := os.Getenv("TWIN_CONFIG_DIR"); dir != "" {
 		return expandPath(dir)

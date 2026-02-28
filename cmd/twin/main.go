@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Josef-Hlink/twin/internal/fr"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 )
@@ -19,6 +20,8 @@ func main() {
 	switch os.Args[1] {
 	case "tspmo":
 		err = tspmo.Run()
+	case "fr":
+		err = fr.Run(os.Args[2:])
 	case "sybau":
 		err = sybau.Run()
 	case "sybau-picker":
@@ -39,6 +42,7 @@ func printUsage() {
 
 commands:
   tspmo    spin up tmux sessions from recipes
+  fr       open a single recipe (fzf picker / name / --list)
   sybau    fzf-based session switcher
 `
 	fmt.Fprint(os.Stderr, usage)
