@@ -30,7 +30,7 @@ func Run() error {
 			continue
 		}
 
-		if err := createSession(name, recipe); err != nil {
+		if err := CreateSession(name, recipe); err != nil {
 			fmt.Fprintf(os.Stderr, "error creating %s: %v\n", name, err)
 			continue
 		}
@@ -52,7 +52,8 @@ func Run() error {
 	return nil
 }
 
-func createSession(name string, recipe config.Recipe) error {
+// CreateSession builds a tmux session from a recipe: creates windows and sends commands.
+func CreateSession(name string, recipe config.Recipe) error {
 	// The first window is created with the session itself (window index 1,
 	// since tmux base-index is commonly 1, but we use the default here).
 	baseDir := recipe.StartDirectory
