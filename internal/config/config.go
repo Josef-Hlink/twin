@@ -11,8 +11,18 @@ import (
 
 // Config represents the top-level twin.toml file.
 type Config struct {
-	RecipeDir string   `toml:"recipe-dir"`
-	Active    []string `toml:"active"`
+	RecipeDir        string   `toml:"recipe-dir"`
+	Active           []string `toml:"active"`
+	OrderedSessions  *bool    `toml:"ordered-sessions"`
+}
+
+// IsOrderedSessions returns whether sessions should be created with delays
+// to preserve ordering. Defaults to true when not explicitly set.
+func (c Config) IsOrderedSessions() bool {
+	if c.OrderedSessions == nil {
+		return true
+	}
+	return *c.OrderedSessions
 }
 
 // Window represents a single window in a recipe.

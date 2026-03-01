@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/tmux"
@@ -17,6 +18,7 @@ func Run() error {
 	}
 
 	var created, skipped []string
+	ordered := cfg.IsOrderedSessions()
 
 	for _, name := range cfg.Active {
 		if tmux.HasSession(name) {
@@ -28,6 +30,12 @@ func Run() error {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "skipping %s: %v\n", name, err)
 			continue
+		}
+
+		// Sleep before creating the next session so tmux assigns distinct
+		// creation timestamps, preserving the order from the active list.
+		if ordered && len(created) > 0 {
+			time.Sleep(1 * time.Second)
 		}
 
 		if err := CreateSession(name, recipe); err != nil {
