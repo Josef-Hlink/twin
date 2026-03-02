@@ -47,6 +47,15 @@ func ListSessions() ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
+// CurrentSession returns the name of the currently attached tmux session.
+func CurrentSession() (string, error) {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // SwitchClient switches the current tmux client to the named session.
 func SwitchClient(name string) error {
 	return exec.Command("tmux", "switch-client", "-t", name).Run()
