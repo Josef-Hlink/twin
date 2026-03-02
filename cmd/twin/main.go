@@ -23,9 +23,9 @@ func main() {
 	case "fr":
 		err = fr.Run(os.Args[2:])
 	case "sybau":
-		err = sybau.Run()
+		err = sybau.Run(os.Args[2:])
 	case "sybau-picker":
-		err = sybau.RunPicker()
+		err = sybau.RunPicker(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)
