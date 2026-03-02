@@ -17,27 +17,29 @@ func Run() error {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
 
-	sessions = filterCurrentSession(sessions)
-
-	if len(sessions) == 0 {
-		fmt.Println("no other tmux sessions running")
-		return nil
-	}
-
+	current, _ := tmux.CurrentSession()
 	numbered := showNumbers()
 
-	height := len(sessions) + 4
-
-	// Width = longest display line + 5 (border + padding), minimum so "sybau" title fits.
+	// Calculate popup dimensions, skipping the current session.
+	count := 0
 	width := len("sybau") + 5
 	for i, s := range sessions {
+		if s == current {
+			continue
+		}
+		count++
 		line := s
 		if numbered {
-			line = fmt.Sprintf("[%d] %s", i+1, s)
+			line = fmt.Sprintf("[%d] %s", i, s)
 		}
 		if w := len(line) + 5; w > width {
 			width = w
 		}
+	}
+
+	if count == 0 {
+		fmt.Println("no other tmux sessions running")
+		return nil
 	}
 
 	// Resolve absolute path so the popup's shell can find the binary.
@@ -46,6 +48,7 @@ func Run() error {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
 
+	height := count + 4
 	return tmux.DisplayPopup("sybau", width, height, "fg=magenta bold", self+" sybau-picker")
 }
 
@@ -57,20 +60,25 @@ func RunPicker() error {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
 
-	sessions = filterCurrentSession(sessions)
+	current, _ := tmux.CurrentSession()
+	numbered := showNumbers()
 
-	if len(sessions) == 0 {
-		fmt.Println("no other tmux sessions running")
-		return nil
+	// Build display lines with original indices, skipping the current session.
+	var lines []string
+	for i, s := range sessions {
+		if s == current {
+			continue
+		}
+		if numbered {
+			lines = append(lines, fmt.Sprintf("[%d] %s", i, s))
+		} else {
+			lines = append(lines, s)
+		}
 	}
 
-	numbered := showNumbers()
-	lines := sessions
-	if numbered {
-		lines = make([]string, len(sessions))
-		for i, s := range sessions {
-			lines[i] = fmt.Sprintf("[%d] %s", i+1, s)
-		}
+	if len(lines) == 0 {
+		fmt.Println("no other tmux sessions running")
+		return nil
 	}
 
 	selected, err := fzfSelect(lines)
@@ -100,21 +108,6 @@ func showNumbers() bool {
 		return false
 	}
 	return cfg.IsOrderedSessions()
-}
-
-// filterCurrentSession removes the currently attached session from the list.
-func filterCurrentSession(sessions []string) []string {
-	current, err := tmux.CurrentSession()
-	if err != nil {
-		return sessions // can't determine current session, return all
-	}
-	filtered := make([]string, 0, len(sessions))
-	for _, s := range sessions {
-		if s != current {
-			filtered = append(filtered, s)
-		}
-	}
-	return filtered
 }
 
 // fzfSelect pipes the given lines to fzf and returns the selected line.
