@@ -20,10 +20,11 @@ func Run() error {
 	current, _ := tmux.CurrentSession()
 	numbered := showNumbers()
 
-	// Calculate popup dimensions, skipping the current session.
+	// Calculate popup dimensions from actual content, skipping the current session.
 	count := 0
-	maxWindows := 0
-	listWidth := len("sybau") + 5
+	maxListLine := len("sybau") // minimum width
+	maxPreviewLine := 0
+	maxWindowCount := 0
 	for i, s := range sessions {
 		if s == current {
 			continue
@@ -33,11 +34,18 @@ func Run() error {
 		if numbered {
 			line = fmt.Sprintf("[%d] %s", i, s)
 		}
-		if w := len(line) + 5; w > listWidth {
-			listWidth = w
+		if len(line) > maxListLine {
+			maxListLine = len(line)
 		}
-		if wc, err := tmux.WindowCount(s); err == nil && wc > maxWindows {
-			maxWindows = wc
+		if windows, err := tmux.ListWindows(s); err == nil {
+			if len(windows) > maxWindowCount {
+				maxWindowCount = len(windows)
+			}
+			for _, w := range windows {
+				if len(w) > maxPreviewLine {
+					maxPreviewLine = len(w)
+				}
+			}
 		}
 	}
 
@@ -52,12 +60,11 @@ func Run() error {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
 
-	// Preview pane sits to the right of the session list. Cap the preview
-	// height so one session with many windows doesn't blow up the popup.
-	const previewWidth = 30
-	width := listWidth + previewWidth + 3
-	previewRows := min(maxWindows, 10)
-	height := max(count, previewRows) + 4
+	// Width: list content + fzf list chrome (4) + preview content + preview separator (2) + tmux border (2).
+	// Height: whichever side is taller (preview rows capped at 10) + fzf chrome (4).
+	previewCols := maxPreviewLine + 2
+	width := maxListLine + 4 + previewCols + 2
+	height := max(count, min(maxWindowCount, 10)) + 4
 	return tmux.DisplayPopup("sybau", width, height, "fg=magenta bold", self+" sybau-picker")
 }
 
@@ -90,7 +97,23 @@ func RunPicker() error {
 		return nil
 	}
 
-	selected, err := fzfSelect(lines)
+	// Compute preview column width from actual window data so the preview
+	// pane is no larger than it needs to be.
+	maxPreviewLine := 0
+	for _, s := range sessions {
+		if s == current {
+			continue
+		}
+		if windows, err := tmux.ListWindows(s); err == nil {
+			for _, w := range windows {
+				if len(w) > maxPreviewLine {
+					maxPreviewLine = len(w)
+				}
+			}
+		}
+	}
+
+	selected, err := fzfSelect(lines, maxPreviewLine)
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -121,14 +144,14 @@ func showNumbers() bool {
 
 // fzfSelect pipes the given lines to fzf and returns the selected line.
 // A preview pane shows the windows of the currently highlighted session.
-func fzfSelect(items []string) (string, error) {
+func fzfSelect(items []string, previewCols int) (string, error) {
 	// The sed strips the "[N] " prefix when session numbers are shown,
 	// and is a no-op otherwise. The awk colorizes the active window (*) in
 	// bold cyan using the window_active flag as a prefix to key off of.
 	previewCmd := `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	cmd := exec.Command("fzf",
 		"--preview", previewCmd,
-		"--preview-window", "right:30:wrap",
+		"--preview-window", fmt.Sprintf("right:%d:wrap:border-left", previewCols),
 	)
 	cmd.Stdin = strings.NewReader(strings.Join(items, "\n"))
 	cmd.Stderr = os.Stderr

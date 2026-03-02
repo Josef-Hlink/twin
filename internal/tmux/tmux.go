@@ -72,17 +72,19 @@ func SwitchClient(name string) error {
 	return exec.Command("tmux", "switch-client", "-t", name).Run()
 }
 
-// WindowCount returns the number of windows in a tmux session.
-func WindowCount(session string) (int, error) {
-	out, err := exec.Command("tmux", "list-windows", "-t", session).Output()
+// ListWindows returns the windows in a session, formatted as "index:name"
+// with tmux flags (e.g. * for active, - for last).
+func ListWindows(session string) ([]string, error) {
+	out, err := exec.Command("tmux", "list-windows", "-t", session,
+		"-F", "#{window_index}:#{window_name}#{window_flags}").Output()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	raw := strings.TrimSpace(string(out))
 	if raw == "" {
-		return 0, nil
+		return nil, nil
 	}
-	return len(strings.Split(raw, "\n")), nil
+	return strings.Split(raw, "\n"), nil
 }
 
 // DisplayPopup opens a tmux popup anchored to the top-left corner.
