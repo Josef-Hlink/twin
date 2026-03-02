@@ -15,8 +15,11 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
+
+	sessions = filterCurrentSession(sessions)
+
 	if len(sessions) == 0 {
-		fmt.Println("no tmux sessions running")
+		fmt.Println("no other tmux sessions running")
 		return nil
 	}
 
@@ -46,8 +49,11 @@ func RunPicker() error {
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
+
+	sessions = filterCurrentSession(sessions)
+
 	if len(sessions) == 0 {
-		fmt.Println("no tmux sessions running")
+		fmt.Println("no other tmux sessions running")
 		return nil
 	}
 
@@ -60,6 +66,21 @@ func RunPicker() error {
 	}
 
 	return tmux.SwitchClient(selected)
+}
+
+// filterCurrentSession removes the currently attached session from the list.
+func filterCurrentSession(sessions []string) []string {
+	current, err := tmux.CurrentSession()
+	if err != nil {
+		return sessions // can't determine current session, return all
+	}
+	filtered := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		if s != current {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 // fzfSelect pipes the given lines to fzf and returns the selected line.
