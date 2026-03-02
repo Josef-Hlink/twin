@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -34,9 +35,10 @@ func SelectWindow(target string) error {
 	return exec.Command("tmux", "select-window", "-t", target).Run()
 }
 
-// ListSessions returns the names of all running tmux sessions.
+// ListSessions returns the names of all running tmux sessions, sorted by
+// creation time (oldest first).
 func ListSessions() ([]string, error) {
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_created} #{session_name}").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +46,16 @@ func ListSessions() ([]string, error) {
 	if raw == "" {
 		return nil, nil
 	}
-	return strings.Split(raw, "\n"), nil
+
+	lines := strings.Split(raw, "\n")
+	sort.Strings(lines) // timestamp prefix ensures chronological order
+
+	names := make([]string, len(lines))
+	for i, line := range lines {
+		_, name, _ := strings.Cut(line, " ")
+		names[i] = name
+	}
+	return names, nil
 }
 
 // CurrentSession returns the name of the currently attached tmux session.
