@@ -123,8 +123,9 @@ func showNumbers() bool {
 // A preview pane shows the windows of the currently highlighted session.
 func fzfSelect(items []string) (string, error) {
 	// The sed strips the "[N] " prefix when session numbers are shown,
-	// and is a no-op otherwise.
-	previewCmd := `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '  #{window_index}: #{window_name}'`
+	// and is a no-op otherwise. The awk colorizes the active window (*) in
+	// bold cyan using the window_active flag as a prefix to key off of.
+	previewCmd := `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	cmd := exec.Command("fzf",
 		"--preview", previewCmd,
 		"--preview-window", "right:30:wrap",
