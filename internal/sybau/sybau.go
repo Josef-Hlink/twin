@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
@@ -23,12 +24,18 @@ func Run() error {
 		return nil
 	}
 
+	numbered := showNumbers()
+
 	height := len(sessions) + 4
 
-	// Width = longest session name + 5 (border + padding), minimum so "sybau" title fits.
+	// Width = longest display line + 5 (border + padding), minimum so "sybau" title fits.
 	width := len("sybau") + 5
-	for _, s := range sessions {
-		if w := len(s) + 5; w > width {
+	for i, s := range sessions {
+		line := s
+		if numbered {
+			line = fmt.Sprintf("[%d] %s", i+1, s)
+		}
+		if w := len(line) + 5; w > width {
 			width = w
 		}
 	}
@@ -57,7 +64,16 @@ func RunPicker() error {
 		return nil
 	}
 
-	selected, err := fzfSelect(sessions)
+	numbered := showNumbers()
+	lines := sessions
+	if numbered {
+		lines = make([]string, len(sessions))
+		for i, s := range sessions {
+			lines[i] = fmt.Sprintf("[%d] %s", i+1, s)
+		}
+	}
+
+	selected, err := fzfSelect(lines)
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -65,7 +81,25 @@ func RunPicker() error {
 		return nil // user cancelled
 	}
 
+	// Strip the "[N] " prefix if present.
+	if numbered {
+		if _, after, ok := strings.Cut(selected, "] "); ok {
+			selected = after
+		}
+	}
+
 	return tmux.SwitchClient(selected)
+}
+
+// showNumbers returns true if session numbers should be displayed in the picker.
+// This is tied to the ordered-sessions config option — numbers only make sense
+// when sessions have a meaningful order.
+func showNumbers() bool {
+	cfg, err := config.Load()
+	if err != nil {
+		return false
+	}
+	return cfg.IsOrderedSessions()
 }
 
 // filterCurrentSession removes the currently attached session from the list.
