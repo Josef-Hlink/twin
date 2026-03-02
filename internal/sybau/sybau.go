@@ -11,17 +11,21 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
+const (
+	chromeWidth       = 5 // fzf prompt + padding + tmux popup border (left/right)
+	chromeHeight      = 4 // fzf prompt + status + tmux popup border (top/bottom)
+	previewExtraWidth = 3 // preview border-left + padding
+)
+
 // PopupDims computes popup width and height from content metrics.
 // When preview is false, the preview columns are ignored and the popup
 // is sized for the list alone.
 func PopupDims(sessionCount, maxListLine, maxPreviewLine, maxWindowCount int, preview bool) (width, height int) {
+	width = maxListLine + chromeWidth
+	height = sessionCount + chromeHeight
 	if preview {
-		previewCols := maxPreviewLine + 2
-		width = maxListLine + 4 + previewCols + 2
-		height = max(sessionCount, min(maxWindowCount, 10)) + 4
-	} else {
-		width = maxListLine + 4 + 1
-		height = sessionCount + 4
+		width += maxPreviewLine + previewExtraWidth
+		height = max(sessionCount, min(maxWindowCount, 10)) + chromeHeight
 	}
 	return width, height
 }
@@ -41,8 +45,6 @@ func Run(args []string) error {
 	// Calculate popup dimensions from actual content, skipping the current session.
 	count := 0
 	maxListLine := len("sybau") // minimum width
-	maxPreviewLine := 0
-	maxWindowCount := 0
 	for i, s := range sessions {
 		if s == current {
 			continue
@@ -55,18 +57,6 @@ func Run(args []string) error {
 		if len(line) > maxListLine {
 			maxListLine = len(line)
 		}
-		if preview {
-			if windows, err := tmux.ListWindows(s); err == nil {
-				if len(windows) > maxWindowCount {
-					maxWindowCount = len(windows)
-				}
-				for _, w := range windows {
-					if len(w) > maxPreviewLine {
-						maxPreviewLine = len(w)
-					}
-				}
-			}
-		}
 	}
 
 	if count == 0 {
@@ -78,6 +68,11 @@ func Run(args []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolving executable path: %w", err)
+	}
+
+	var maxPreviewLine, maxWindowCount int
+	if preview {
+		maxPreviewLine, maxWindowCount = windowMetrics(sessions, current)
 	}
 
 	width, height := PopupDims(count, maxListLine, maxPreviewLine, maxWindowCount, preview)
@@ -120,24 +115,9 @@ func RunPicker(args []string) error {
 		return nil
 	}
 
-	// Compute preview column width from actual window data so the preview
-	// pane is no larger than it needs to be.
 	previewCols := 0
 	if preview {
-		maxPreviewLine := 0
-		for _, s := range sessions {
-			if s == current {
-				continue
-			}
-			if windows, err := tmux.ListWindows(s); err == nil {
-				for _, w := range windows {
-					if len(w) > maxPreviewLine {
-						maxPreviewLine = len(w)
-					}
-				}
-			}
-		}
-		previewCols = maxPreviewLine
+		previewCols, _ = windowMetrics(sessions, current)
 	}
 
 	selected, err := fzfSelect(lines, previewCols)
@@ -156,6 +136,29 @@ func RunPicker(args []string) error {
 	}
 
 	return tmux.SwitchClient(selected)
+}
+
+// windowMetrics returns the longest window line and max window count across
+// the given sessions, skipping the named session.
+func windowMetrics(sessions []string, skip string) (maxLine, maxCount int) {
+	for _, s := range sessions {
+		if s == skip {
+			continue
+		}
+		windows, err := tmux.ListWindows(s)
+		if err != nil {
+			continue
+		}
+		if len(windows) > maxCount {
+			maxCount = len(windows)
+		}
+		for _, w := range windows {
+			if len(w) > maxLine {
+				maxLine = len(w)
+			}
+		}
+	}
+	return maxLine, maxCount
 }
 
 // showNumbers returns true if session numbers should be displayed in the picker.
