@@ -1,9 +1,12 @@
 package tspmo
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/Josef-Hlink/twin/internal/config"
@@ -17,12 +20,19 @@ func Run() error {
 		return err
 	}
 
-	var created, skipped []string
+	if len(cfg.Active) == 0 {
+		fmt.Println("no active recipes configured")
+		return nil
+	}
+
+	tty := isTTY()
+	p := newProgress(cfg.Active, tty)
 	ordered := cfg.IsOrderedSessions()
+	created := 0
 
 	for _, name := range cfg.Active {
 		if tmux.HasSession(name) {
-			skipped = append(skipped, name)
+			p.skip(name)
 			continue
 		}
 
@@ -34,30 +44,67 @@ func Run() error {
 
 		// Sleep before creating the next session so tmux assigns distinct
 		// creation timestamps, preserving the order from the active list.
-		if ordered && len(created) > 0 {
+		if ordered && created > 0 {
 			time.Sleep(1 * time.Second)
 		}
+
+		p.start(name)
 
 		if err := CreateSession(name, recipe); err != nil {
 			fmt.Fprintf(os.Stderr, "error creating %s: %v\n", name, err)
 			continue
 		}
 
-		created = append(created, name)
+		p.markDone(name)
+		created++
 	}
 
-	// Print summary.
-	if len(created) > 0 {
-		fmt.Printf("created: %v\n", created)
+	p.halt()
+
+	// Auto-attach after session creation.
+	if p.done_ == 0 {
+		return nil
 	}
-	if len(skipped) > 0 {
-		fmt.Printf("skipped (already exists): %v\n", skipped)
-	}
-	if len(created) == 0 && len(skipped) == 0 {
-		fmt.Println("no active recipes configured")
+	if !tty {
+		return nil
 	}
 
-	return nil
+	target, err := attachTarget(cfg)
+	if err != nil {
+		return err
+	}
+	if target == "" {
+		return nil
+	}
+
+	if tmux.InTmux() {
+		return tmux.SwitchClient(target)
+	}
+	return tmux.AttachSession(target)
+}
+
+// attachTarget determines which session to attach to.
+// Returns empty string if the user declines.
+func attachTarget(cfg config.Config) (string, error) {
+	if cfg.AutoAttachTo != "" {
+		if !slices.Contains(cfg.Active, cfg.AutoAttachTo) {
+			return "", fmt.Errorf("auto-attach-to %q is not in active list", cfg.AutoAttachTo)
+		}
+		return cfg.AutoAttachTo, nil
+	}
+
+	// Prompt the user, defaulting to the first active session.
+	target := cfg.Active[0]
+	fmt.Printf("attach to %s? [Y/n] ", target)
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer == "" || answer == "y" || answer == "yes" {
+		return target, nil
+	}
+	return "", nil
 }
 
 // CreateSession builds a tmux session from a recipe: creates windows and sends commands.
