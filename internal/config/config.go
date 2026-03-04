@@ -14,6 +14,7 @@ type Config struct {
 	RecipeDir        string   `toml:"recipe-dir"`
 	Active           []string `toml:"active"`
 	OrderedSessions  *bool    `toml:"ordered-sessions"`
+	AutoAttachTo     string   `toml:"auto-attach-to"`
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays

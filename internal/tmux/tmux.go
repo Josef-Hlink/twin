@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -98,4 +99,19 @@ func DisplayPopup(title string, width, height int, style, command string) error 
 		"-S", style,
 		"-E", command,
 	).Run()
+}
+
+// InTmux returns true if the current process is running inside tmux.
+func InTmux() bool {
+	return os.Getenv("TMUX") != ""
+}
+
+// AttachSession attaches the terminal to the named tmux session.
+// Stdin/stdout/stderr are connected so tmux takes over the terminal.
+func AttachSession(name string) error {
+	cmd := exec.Command("tmux", "attach-session", "-t", name)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
