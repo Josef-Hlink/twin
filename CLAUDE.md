@@ -8,11 +8,14 @@ Born out of the frustration of manually setting up tmux workspaces every morning
 twin has subcommands:
 
 - `twin tspmo` — spin up tmux sessions from TOML recipes (the main "opener")
-- `twin sybau` — fzf-based session switcher (bind to a tmux key for quick switching)
+- `twin fr` — open a single recipe session (fzf picker, by name, or list)
+- `twin sybau` — fzf-based session switcher in a tmux popup (bind to a tmux key)
 
 The name "twin" is short, clean, and works as an acronym (tmux workspace/window something).
-"tspmo" and "sybau" are playful slang-inspired names (ts pmo = this shit pisses me off,
-sybau = shut your bitch ass up).
+Subcommand names are playful slang-inspired:
+- "tspmo" = this shit pisses me off
+- "fr" = for real
+- "sybau" = shut your bitch ass up
 
 ## Architecture
 
@@ -25,17 +28,22 @@ twin/
       main.go           # CLI entrypoint, subcommand dispatch
   internal/
     tspmo/
-      tspmo.go          # recipe parsing + tmux session creation
+      tspmo.go          # bulk session creation from active recipes
+      spinner.go         # braille unicode progress spinner
+    fr/
+      fr.go             # single recipe opener (fzf picker / name / --list)
     sybau/
-      sybau.go          # fzf session picker + switcher
+      sybau.go          # fzf session picker in tmux popup
     config/
-      config.go         # twin.toml config loading
+      config.go         # twin.toml + recipe loading
     tmux/
       tmux.go           # thin wrapper around tmux CLI commands
+  .github/
+    workflows/
+      lint-pr.yml       # conventional commit PR title enforcement
   go.mod
   go.sum
   CLAUDE.md
-  README.md
 ```
 
 ### Config & recipes
@@ -46,8 +54,16 @@ Config lives at `~/.config/twin/twin.toml` (XDG). Path overridable via `TWIN_CON
 ```toml
 recipe-dir = "~/.config/twin/recipes"  # where to find recipe files
 
-# which recipes to spin up (filenames without .toml extension)
+# which recipes to spin up with tspmo (filenames without .toml extension)
 active = ["front", "back", "infra"]
+
+# optional: preserve session creation order by adding a 1s delay between spawns
+# also enables session numbering in sybau picker. defaults to true.
+ordered-sessions = true
+
+# optional: auto-attach to this session after tspmo finishes (must be in active list).
+# if omitted, tspmo prompts the user.
+auto-attach-to = "front"
 ```
 
 **Recipe files** (e.g. `~/.config/twin/recipes/front.toml`):
@@ -73,6 +89,7 @@ commands = ["make run"]
 - `windows` is an ordered array; window names are optional (tmux shows the active command by default)
 - `start-directory` on a window is relative to the recipe's top-level start-directory
 - `commands` is optional; if omitted the window just opens a shell
+- `~` and environment variables are expanded in paths
 - No pane/split support — one pane per window, keep it simple
 
 ### Subcommand behavior
@@ -82,17 +99,51 @@ commands = ["make run"]
 2. Read the `active` list
 3. For each active recipe: parse the TOML, create a tmux session with windows/commands
 4. Skip recipes whose session name already exists (idempotent)
-5. Print a summary of what was created/skipped
+5. Show real-time spinner progress (braille animation in TTY, plain lines otherwise)
+6. When `ordered-sessions` is true (default), add 1s delay between spawns to preserve order
+7. Auto-attach to `auto-attach-to` session, or prompt user with `[Y/n]`
+8. Attachment uses `switch-client` inside tmux, `attach-session` outside
+
+**`twin fr`**:
+- `twin fr` — fzf picker showing recipes that don't have an open session yet
+- `twin fr <name>` — open a specific recipe directly (skip if session exists)
+- `twin fr --list` — print all available recipe names
 
 **`twin sybau`**:
-1. Get list of running tmux sessions
-2. Pipe to fzf for fuzzy selection
+1. Spawn a tmux popup containing an fzf session picker
+2. Excludes the currently attached session from the list
 3. Switch to the selected session
-4. Designed to be bound in tmux.conf: `bind-key Space run-shell "twin sybau"`
+4. `--preview` flag shows each session's windows in a right-side preview pane
+5. When `ordered-sessions` is true, sessions show numbered as `[N] name`
+6. Designed to be bound in tmux.conf: `bind-key Space run-shell "twin sybau --preview"`
+
+**`sybau-picker`** — internal subcommand that runs inside the tmux popup spawned by `sybau`.
+Not meant to be called directly. Uses `os.Executable()` for the absolute path since the
+popup shell doesn't inherit PATH context.
 
 **Teardown**: not a twin concern — just use `tmux kill-server` or kill individual sessions manually.
 
-## Development guidelines
+## Development workflow
+
+### Git & GitHub
+
+- **Issues first**: features and bugs get a GitHub issue before work starts
+- **Branch naming**: `<issue-number>/<slug>` for issue work, `chore/<slug>` for non-issue work
+  - Examples: `23/fr-popup-attach`, `chore/extract-usage-text`
+- **Commits**: follow 50/72 rule (50 char subject, 72 char body wrap). No conventional commit format on branch commits.
+- **PR titles**: conventional commit format enforced by CI (`feat(scope):`, `fix(scope):`, etc.)
+- **Squash merge**: `gh pr merge <n> --squash --delete-branch` — GitHub auto-appends `(#n)` to the subject, body left empty
+- **CI**: `lint-pr.yml` runs `amannn/action-semantic-pull-request@v6` on PR titles
+
+### Building
+
+```sh
+go build ./cmd/twin    # produces ./twin binary
+```
+
+`.gitignore` uses `/twin` (leading slash) to ignore the binary without matching `cmd/twin/`.
+
+### Code guidelines
 
 - **Keep it lightweight.** No frameworks, no unnecessary abstractions. Standard library + minimal deps.
 - **Dependencies**: only what's truly needed. Currently: `BurntSushi/toml` for TOML parsing. fzf is called as an external command (not embedded).
