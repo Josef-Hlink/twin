@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"sort"
@@ -114,4 +115,96 @@ func AttachSession(name string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// Pane represents a single tmux pane.
+type Pane struct {
+	SessionName string
+	WindowIndex int
+	WindowName  string
+	PaneIndex   int
+	PanePID     int
+	Command     string
+	Target      string // "session:window.pane"
+}
+
+// ListAllPanes returns every pane across all tmux sessions.
+func ListAllPanes() ([]Pane, error) {
+	out, err := exec.Command("tmux", "list-panes", "-a",
+		"-F", "#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_pid}\t#{pane_current_command}").Output()
+	if err != nil {
+		return nil, err
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nil, nil
+	}
+
+	var panes []Pane
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 6 {
+			continue
+		}
+		wIdx, _ := strconv.Atoi(fields[1])
+		pIdx, _ := strconv.Atoi(fields[3])
+		pid, _ := strconv.Atoi(fields[4])
+		panes = append(panes, Pane{
+			SessionName: fields[0],
+			WindowIndex: wIdx,
+			WindowName:  fields[2],
+			PaneIndex:   pIdx,
+			PanePID:     pid,
+			Command:     fields[5],
+			Target:      fmt.Sprintf("%s:%d.%d", fields[0], wIdx, pIdx),
+		})
+	}
+	return panes, nil
+}
+
+// CapturePane captures the visible content of a tmux pane as plain text.
+func CapturePane(target string) (string, error) {
+	out, err := exec.Command("tmux", "capture-pane", "-t", target, "-p").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// ClientSize returns the width and height of the current tmux client.
+func ClientSize() (width, height int, err error) {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{client_width}\t#{client_height}").Output()
+	if err != nil {
+		return 0, 0, err
+	}
+	fields := strings.Split(strings.TrimSpace(string(out)), "\t")
+	if len(fields) < 2 {
+		return 0, 0, fmt.Errorf("unexpected output: %s", out)
+	}
+	w, _ := strconv.Atoi(fields[0])
+	h, _ := strconv.Atoi(fields[1])
+	return w, h, nil
+}
+
+// DisplayPopupRight opens a tmux popup anchored to the right side, vertically centered.
+func DisplayPopupRight(title string, width, height int, style, command string) error {
+	clientW, clientH, _ := ClientSize()
+	x := clientW - width
+	if x < 0 {
+		x = 0
+	}
+	y := (clientH - height) / 2
+	if y < 0 {
+		y = 0
+	}
+
+	return exec.Command("tmux", "display-popup",
+		"-T", title,
+		"-x", strconv.Itoa(x),
+		"-y", strconv.Itoa(y),
+		"-w", strconv.Itoa(width),
+		"-h", strconv.Itoa(height),
+		"-S", style,
+		"-E", command,
+	).Run()
 }

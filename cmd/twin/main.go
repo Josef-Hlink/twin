@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/Josef-Hlink/twin/internal/fr"
+	"github.com/Josef-Hlink/twin/internal/icl"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 )
@@ -26,6 +27,10 @@ func main() {
 		err = sybau.Run(os.Args[2:])
 	case "sybau-picker":
 		err = sybau.RunPicker(os.Args[2:])
+	case "icl":
+		err = icl.Run()
+	case "icl-view":
+		err = icl.RunView()
 	default:
 		printUsage()
 		os.Exit(1)
@@ -44,6 +49,7 @@ commands:
   tspmo    spin up tmux sessions from recipes
   fr       open a single recipe (fzf picker / name / --list)
   sybau    fzf-based session switcher
+  icl      quick-glance at running Claude agent panes
 `
 	fmt.Fprint(os.Stderr, usage)
 }
