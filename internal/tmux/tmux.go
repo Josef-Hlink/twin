@@ -141,7 +141,7 @@ func ListAllPanes() ([]Pane, error) {
 	}
 
 	var panes []Pane
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		fields := strings.Split(line, "\t")
 		if len(fields) < 6 {
 			continue
@@ -162,9 +162,9 @@ func ListAllPanes() ([]Pane, error) {
 	return panes, nil
 }
 
-// CapturePane captures the visible content of a tmux pane as plain text.
+// CapturePane captures the visible content of a tmux pane, preserving ANSI escape sequences.
 func CapturePane(target string) (string, error) {
-	out, err := exec.Command("tmux", "capture-pane", "-t", target, "-p").Output()
+	out, err := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-e").Output()
 	if err != nil {
 		return "", err
 	}
@@ -186,17 +186,28 @@ func ClientSize() (width, height int, err error) {
 	return w, h, nil
 }
 
+// DisplayPopupCenter opens a tmux popup centered on the screen.
+func DisplayPopupCenter(title string, width, height int, style, command string) error {
+	clientW, clientH, _ := ClientSize()
+	x := max((clientW-width)/2, 0)
+	y := max((clientH-height)/2, 0)
+
+	return exec.Command("tmux", "display-popup",
+		"-T", title,
+		"-x", strconv.Itoa(x),
+		"-y", strconv.Itoa(y),
+		"-w", strconv.Itoa(width),
+		"-h", strconv.Itoa(height),
+		"-S", style,
+		"-E", command,
+	).Run()
+}
+
 // DisplayPopupRight opens a tmux popup anchored to the right side, vertically centered.
 func DisplayPopupRight(title string, width, height int, style, command string) error {
 	clientW, clientH, _ := ClientSize()
-	x := clientW - width
-	if x < 0 {
-		x = 0
-	}
-	y := (clientH - height) / 2
-	if y < 0 {
-		y = 0
-	}
+	x := max(clientW-width, 0)
+	y := max((clientH-height)/2, 0)
 
 	return exec.Command("tmux", "display-popup",
 		"-T", title,

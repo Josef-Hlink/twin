@@ -2,20 +2,26 @@ package icl
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
-const (
-	captureLines = 10
-	maxCols      = 50
-)
+// claudePane wraps a tmux pane with cached content and detected state.
+type claudePane struct {
+	pane    tmux.Pane
+	label   string // "session:window"
+	content string // captured pane output
+	state   byte   // '*' busy, '&' menu, '-' idle
+}
 
-// Run spawns a right-side tmux popup showing Claude agent pane contents.
+// Run spawns a centered tmux popup showing the interactive Claude quickview.
 func Run() error {
 	panes, err := findClaudePanes()
 	if err != nil {
@@ -31,17 +37,20 @@ func Run() error {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
 
-	_, clientH, _ := tmux.ClientSize()
-	width := maxCols + 4
-	contentH := len(panes)*(captureLines+3) + 3
-	height := min(contentH, clientH-2)
-	height = max(height, 10)
+	clientW, clientH, _ := tmux.ClientSize()
+	width := clientW * 80 / 100
+	if width < 40 {
+		width = 40
+	}
+	height := clientH * 70 / 100
+	if height < 10 {
+		height = 10
+	}
 
-	return tmux.DisplayPopupRight("icl", width, height, "fg=colour214,bold", self+" icl-view")
+	return tmux.DisplayPopupCenter("icl", width, height, "fg=colour214,bold", self+" icl-view")
 }
 
-// RunView renders Claude pane summaries and exits. Runs inside the popup.
-// The popup closes automatically when this returns (tmux -E flag).
+// RunView renders the interactive tabbed Claude pane viewer. Runs inside the popup.
 func RunView() error {
 	panes, err := findClaudePanes()
 	if err != nil {
@@ -52,36 +61,263 @@ func RunView() error {
 		return nil
 	}
 
-	orange := "\033[38;5;214m"
-	reset := "\033[0m"
+	// Build claudePane list with captured content and state.
+	cPanes := make([]claudePane, len(panes))
 	for i, p := range panes {
 		label := fmt.Sprintf("%s:%d", p.SessionName, p.WindowIndex)
-		// ━━ label ━━━━━━━━━━━━━━━━━━━━
-		pad := maxCols - len("━━"+" "+label+" ") // leading ━━, spaces around label
-		if pad < 2 {
-			pad = 2
-		}
-		fmt.Printf("%s━━ %s %s%s\n", orange, label, strings.Repeat("━", pad), reset)
-
-		content, err := tmux.CapturePane(p.Target)
-		if err != nil {
-			fmt.Printf("  (error: %v)\n", err)
-			continue
-		}
-
-		for _, line := range lastLines(content, captureLines) {
-			fmt.Println(trunc(line, maxCols))
-		}
-		if i < len(panes)-1 {
-			fmt.Println()
+		content, _ := tmux.CapturePane(p.Target)
+		cPanes[i] = claudePane{
+			pane:    p,
+			label:   label,
+			content: content,
+			state:   detectState(content),
 		}
 	}
 
-	// Wait for any keypress to dismiss.
-	fmt.Print("\npress any key to close")
-	b := make([]byte, 1)
-	os.Stdin.Read(b)
+	// Get popup terminal size via stty.
+	width, height := termSize()
+	if width == 0 || height == 0 {
+		width, height = 80, 24
+	}
+
+	// Enter raw mode.
+	restore, err := sttyRaw()
+	if err != nil {
+		return fmt.Errorf("entering raw mode: %w", err)
+	}
+	defer restore()
+
+	selected := 0
+	buf := make([]byte, 3)
+
+	for {
+		render(os.Stdout, cPanes, selected, width, height)
+
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			break
+		}
+
+		switch {
+		// Escape key alone
+		case n == 1 && buf[0] == 27:
+			return nil
+		// q to quit
+		case n == 1 && buf[0] == 'q':
+			return nil
+		// Enter: switch to pane
+		case n == 1 && buf[0] == 13:
+			p := cPanes[selected].pane
+			target := fmt.Sprintf("%s:%d", p.SessionName, p.WindowIndex)
+			tmux.SwitchClient(p.SessionName)
+			tmux.SelectWindow(target)
+			return nil
+		// h/H or left arrow: previous tab
+		case n == 1 && (buf[0] == 'h' || buf[0] == 'H'):
+			selected = (selected - 1 + len(cPanes)) % len(cPanes)
+		case n == 3 && buf[0] == 27 && buf[1] == '[' && buf[2] == 'D':
+			selected = (selected - 1 + len(cPanes)) % len(cPanes)
+		// l/L or right arrow: next tab
+		case n == 1 && (buf[0] == 'l' || buf[0] == 'L'):
+			selected = (selected + 1) % len(cPanes)
+		case n == 3 && buf[0] == 27 && buf[1] == '[' && buf[2] == 'C':
+			selected = (selected + 1) % len(cPanes)
+		}
+	}
+
 	return nil
+}
+
+// --- Terminal helpers ---
+
+// sttyRaw puts the terminal in raw mode and returns a function to restore it.
+func sttyRaw() (restore func(), err error) {
+	// Save current settings. Must connect stdin so stty sees the terminal.
+	save := exec.Command("stty", "-g")
+	save.Stdin = os.Stdin
+	out, err := save.Output()
+	if err != nil {
+		return nil, err
+	}
+	saved := strings.TrimSpace(string(out))
+
+	// Enter raw mode.
+	raw := exec.Command("stty", "raw", "-echo")
+	raw.Stdin = os.Stdin
+	if err := raw.Run(); err != nil {
+		return nil, err
+	}
+
+	return func() {
+		cmd := exec.Command("stty", saved)
+		cmd.Stdin = os.Stdin
+		cmd.Run()
+	}, nil
+}
+
+// termSize returns terminal cols and rows via stty size.
+func termSize() (width, height int) {
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 2 {
+		return 0, 0
+	}
+	h, _ := strconv.Atoi(fields[0])
+	w, _ := strconv.Atoi(fields[1])
+	return w, h
+}
+
+// --- State detection ---
+
+var menuLineRe = regexp.MustCompile(`^\s*\d+\.\s`)
+
+// detectState scans the last ~20 lines of captured content to determine pane state.
+func detectState(content string) byte {
+	lines := lastLines(content, 20)
+
+	// Check last 10 lines for menu pattern (2+ matches = menu).
+	scanLines := lines
+	if len(scanLines) > 10 {
+		scanLines = scanLines[len(scanLines)-10:]
+	}
+	menuCount := 0
+	for _, line := range scanLines {
+		if isMenuLine(line) {
+			menuCount++
+		}
+	}
+	if menuCount >= 2 {
+		return '&'
+	}
+
+	// Check all 20 lines for busy pattern.
+	for i := len(lines) - 1; i >= 0; i-- {
+		if isBusyLine(lines[i]) {
+			return '*'
+		}
+	}
+
+	return '-'
+}
+
+// isMenuLine checks if a line matches the "N. " pattern (digit, dot, space).
+func isMenuLine(line string) bool {
+	return menuLineRe.MatchString(line)
+}
+
+// isBusyLine checks if a line contains a word ending in "ing…" or "ing..."
+// which matches Claude's spinner status text (Crunching…, Reading…, etc.).
+func isBusyLine(line string) bool {
+	for w := range strings.FieldsSeq(line) {
+		lower := strings.ToLower(w)
+		if strings.HasSuffix(lower, "ing…") || strings.HasSuffix(lower, "ing...") {
+			return true
+		}
+	}
+	return false
+}
+
+// --- Rendering ---
+
+const (
+	ansiOrange  = "\033[38;5;214m"
+	ansiReverse = "\033[7m"
+	ansiReset   = "\033[0m"
+	ansiClear = "\033[2J\033[H" // clear screen + cursor home
+	ansiDim   = "\033[2m"
+)
+
+// render draws the full TUI: tab bar, separator, preview, status line.
+func render(w io.Writer, panes []claudePane, selected, width, height int) {
+	var b strings.Builder
+
+	// Clear screen and move cursor home.
+	b.WriteString(ansiClear)
+
+	// --- Tab bar (line 1) ---
+	b.WriteString(ansiOrange)
+	var tabBar strings.Builder
+	for i, p := range panes {
+		tab := fmt.Sprintf(" %s %c ", p.label, p.state)
+		if i == selected {
+			tabBar.WriteString(ansiReverse)
+			tabBar.WriteString(tab)
+			tabBar.WriteString(ansiReset)
+			tabBar.WriteString(ansiOrange)
+		} else {
+			tabBar.WriteString(tab)
+		}
+		if i < len(panes)-1 {
+			tabBar.WriteString("|")
+		}
+	}
+	// Pad or truncate tab bar to width.
+	tabStr := tabBar.String()
+	b.WriteString(tabStr)
+	b.WriteString(ansiReset)
+	b.WriteString("\r\n")
+
+	// --- Separator (line 2) ---
+	b.WriteString(ansiOrange)
+	b.WriteString(strings.Repeat("━", width))
+	b.WriteString(ansiReset)
+	b.WriteString("\r\n")
+
+	// --- Preview area (lines 3 to height-1) ---
+	previewHeight := max(height-3, 1) // tab bar + separator + status line
+
+	content := panes[selected].content
+	previewLines := lastLines(content, previewHeight)
+
+	for i := range previewHeight {
+		if i < len(previewLines) {
+			line := truncVisible(previewLines[i], width)
+			b.WriteString(line)
+			b.WriteString(ansiReset) // prevent color bleed across lines
+		}
+		b.WriteString("\r\n")
+	}
+
+	// --- Status line (last line) ---
+	b.WriteString(ansiDim)
+	status := " H/L: navigate  Enter: switch  q: close"
+	b.WriteString(truncVisible(status, width))
+	b.WriteString(ansiReset)
+
+	w.Write([]byte(b.String()))
+}
+
+// truncVisible truncates a string to n visible columns, skipping ANSI
+// escape sequences so they don't count toward the width.
+func truncVisible(s string, n int) string {
+	visible := 0
+	i := 0
+	for i < len(s) {
+		// Skip ANSI escape sequences (\033[...m).
+		if i+1 < len(s) && s[i] == '\033' && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			if j < len(s) {
+				j++ // skip the 'm'
+			}
+			i = j
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		visible++
+		if visible > n {
+			return s[:i]
+		}
+		i += size
+	}
+	return s
 }
 
 // --- Claude pane detection ---
@@ -135,7 +371,7 @@ func allProcesses() (map[int]proc, error) {
 	}
 
 	procs := make(map[int]proc)
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
 			continue
@@ -178,13 +414,4 @@ func lastLines(content string, n int) []string {
 		lines = lines[len(lines)-n:]
 	}
 	return lines
-}
-
-// trunc truncates a string to n visible runes.
-func trunc(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) > n {
-		return string(runes[:n])
-	}
-	return s
 }
