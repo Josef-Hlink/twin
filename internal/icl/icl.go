@@ -47,7 +47,7 @@ func Run() error {
 		height = 10
 	}
 
-	return tmux.DisplayPopupCenter("icl", width, height, "fg=colour214,bold", self+" icl-view")
+	return tmux.DisplayPopup(tmux.PopupCenter, "icl", width, height, "fg=colour214,bold", self+" icl-view")
 }
 
 // RunView renders the interactive tabbed Claude pane viewer. Runs inside the popup.

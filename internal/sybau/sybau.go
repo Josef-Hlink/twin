@@ -81,7 +81,7 @@ func Run(args []string) error {
 	if preview {
 		cmd += " --preview"
 	}
-	return tmux.DisplayPopup("sybau", width, height, "fg=magenta bold", cmd)
+	return tmux.DisplayPopup(tmux.PopupTopLeft, "sybau", width, height, "fg=magenta bold", cmd)
 }
 
 // RunPicker lists tmux sessions, lets the user pick one via fzf, and switches to it.

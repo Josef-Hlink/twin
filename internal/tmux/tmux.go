@@ -89,12 +89,32 @@ func ListWindows(session string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
-// DisplayPopup opens a tmux popup anchored to the top-left corner.
-func DisplayPopup(title string, width, height int, style, command string) error {
+// PopupAnchor controls where a popup is positioned on screen.
+type PopupAnchor int
+
+const (
+	PopupTopLeft PopupAnchor = iota // flush top-left, row 0 stays visible
+	PopupCenter                     // centered on screen
+)
+
+// DisplayPopup opens a tmux popup at the given anchor position.
+func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, command string) error {
+	clientW, clientH, _ := ClientSize()
+
+	var x, y int
+	switch anchor {
+	case PopupTopLeft:
+		x = 0
+		y = height + 1
+	case PopupCenter:
+		x = (clientW - width) / 2
+		y = (clientH + height) / 2
+	}
+
 	return exec.Command("tmux", "display-popup",
 		"-T", title,
-		"-x", "0",
-		"-y", strconv.Itoa(height+1),
+		"-x", strconv.Itoa(x),
+		"-y", strconv.Itoa(y),
 		"-w", strconv.Itoa(width),
 		"-h", strconv.Itoa(height),
 		"-S", style,
@@ -184,38 +204,4 @@ func ClientSize() (width, height int, err error) {
 	w, _ := strconv.Atoi(fields[0])
 	h, _ := strconv.Atoi(fields[1])
 	return w, h, nil
-}
-
-// DisplayPopupCenter opens a tmux popup centered on the screen.
-func DisplayPopupCenter(title string, width, height int, style, command string) error {
-	clientW, clientH, _ := ClientSize()
-	x := max((clientW-width)/2, 0)
-	y := max((clientH-height)/2, 0)
-
-	return exec.Command("tmux", "display-popup",
-		"-T", title,
-		"-x", strconv.Itoa(x),
-		"-y", strconv.Itoa(y),
-		"-w", strconv.Itoa(width),
-		"-h", strconv.Itoa(height),
-		"-S", style,
-		"-E", command,
-	).Run()
-}
-
-// DisplayPopupRight opens a tmux popup anchored to the right side, vertically centered.
-func DisplayPopupRight(title string, width, height int, style, command string) error {
-	clientW, clientH, _ := ClientSize()
-	x := max(clientW-width, 0)
-	y := max((clientH-height)/2, 0)
-
-	return exec.Command("tmux", "display-popup",
-		"-T", title,
-		"-x", strconv.Itoa(x),
-		"-y", strconv.Itoa(y),
-		"-w", strconv.Itoa(width),
-		"-h", strconv.Itoa(height),
-		"-S", style,
-		"-E", command,
-	).Run()
 }
