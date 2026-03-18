@@ -2,33 +2,13 @@ package sybau
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"slices"
 	"strings"
 
 	"github.com/Josef-Hlink/twin/internal/config"
+	"github.com/Josef-Hlink/twin/internal/popup"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
-
-const (
-	chromeWidth       = 5 // fzf prompt + padding + tmux popup border (left/right)
-	chromeHeight      = 4 // fzf prompt + status + tmux popup border (top/bottom)
-	previewExtraWidth = 3 // preview border-left + padding
-)
-
-// PopupDims computes popup width and height from content metrics.
-// When preview is false, the preview columns are ignored and the popup
-// is sized for the list alone.
-func PopupDims(sessionCount, maxListLine, maxPreviewLine, maxWindowCount int, preview bool) (width, height int) {
-	width = maxListLine + chromeWidth
-	height = sessionCount + chromeHeight
-	if preview {
-		width += maxPreviewLine + previewExtraWidth
-		height = max(sessionCount, min(maxWindowCount, 10)) + chromeHeight
-	}
-	return width, height
-}
 
 // Run launches a tmux popup containing the fzf session picker.
 func Run(args []string) error {
@@ -64,24 +44,18 @@ func Run(args []string) error {
 		return nil
 	}
 
-	// Resolve absolute path so the popup's shell can find the binary.
-	self, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolving executable path: %w", err)
-	}
-
 	var maxPreviewLine, maxWindowCount int
 	if preview {
 		maxPreviewLine, maxWindowCount = windowMetrics(sessions, current)
 	}
 
-	width, height := PopupDims(count, maxListLine, maxPreviewLine, maxWindowCount, preview)
+	width, height := popup.Dims(count, maxListLine, maxPreviewLine, maxWindowCount, preview)
 
-	cmd := self + " sybau-picker"
+	cmd := "sybau-picker"
 	if preview {
 		cmd += " --preview"
 	}
-	return tmux.DisplayPopup("sybau", width, height, "fg=magenta bold", cmd)
+	return popup.Launch("sybau", width, height, cmd)
 }
 
 // RunPicker lists tmux sessions, lets the user pick one via fzf, and switches to it.
@@ -116,11 +90,16 @@ func RunPicker(args []string) error {
 	}
 
 	previewCols := 0
+	var previewCmd string
 	if preview {
 		previewCols, _ = windowMetrics(sessions, current)
+		// The sed strips the "[N] " prefix when session numbers are shown,
+		// and is a no-op otherwise. The awk colorizes the active window (*) in
+		// bold cyan using the window_active flag as a prefix to key off of.
+		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	}
 
-	selected, err := fzfSelect(lines, previewCols)
+	selected, err := popup.FzfSelect(lines, previewCols, previewCmd)
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -170,40 +149,4 @@ func showNumbers() bool {
 		return false
 	}
 	return cfg.IsOrderedSessions()
-}
-
-// fzfSelect pipes the given lines to fzf and returns the selected line.
-// When previewCols > 0, a preview pane shows the windows of the highlighted session.
-// When previewCols == 0, fzf runs without a preview pane.
-func fzfSelect(items []string, previewCols int) (string, error) {
-	var fzfArgs []string
-	if previewCols > 0 {
-		// The sed strips the "[N] " prefix when session numbers are shown,
-		// and is a no-op otherwise. The awk colorizes the active window (*) in
-		// bold cyan using the window_active flag as a prefix to key off of.
-		previewCmd := `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
-		fzfArgs = append(fzfArgs,
-			"--preview", previewCmd,
-			"--preview-window", fmt.Sprintf("right:%d:wrap:border-left", previewCols),
-		)
-	}
-
-	cmd := exec.Command("fzf", fzfArgs...)
-	cmd.Stdin = strings.NewReader(strings.Join(items, "\n"))
-	cmd.Stderr = os.Stderr
-
-	out, err := cmd.Output()
-	if err != nil {
-		// fzf exits 130 when the user presses Escape — not an error.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
-			return "", nil
-		}
-		// fzf exits 1 when there's no match — also not an error.
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return "", nil
-		}
-		return "", err
-	}
-
-	return strings.TrimSpace(string(out)), nil
 }
