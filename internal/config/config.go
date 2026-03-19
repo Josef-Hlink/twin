@@ -11,10 +11,11 @@ import (
 
 // Config represents the top-level twin.toml file.
 type Config struct {
-	RecipeDir        string   `toml:"recipe-dir"`
-	Active           []string `toml:"active"`
-	OrderedSessions  *bool    `toml:"ordered-sessions"`
-	AutoAttachTo     string   `toml:"auto-attach-to"`
+	RecipeDir       string   `toml:"recipe-dir"`
+	Active          []string `toml:"active"`
+	OrderedSessions *bool    `toml:"ordered-sessions"`
+	AutoAttachTo    string   `toml:"auto-attach-to"`
+	TysmMsg         string   `toml:"tysm-msg"`
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays
