@@ -115,3 +115,8 @@ func AttachSession(name string) error {
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
+
+// KillServer kills the tmux server, terminating all sessions.
+func KillServer() error {
+	return exec.Command("tmux", "kill-server").Run()
+}

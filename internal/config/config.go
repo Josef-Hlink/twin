@@ -15,6 +15,7 @@ type Config struct {
 	Active          []string `toml:"active"`
 	OrderedSessions *bool    `toml:"ordered-sessions"`
 	AutoAttachTo    string   `toml:"auto-attach-to"`
+	TysmMsg         string   `toml:"tysm-msg"`
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays

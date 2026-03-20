@@ -7,6 +7,7 @@ import (
 	"github.com/Josef-Hlink/twin/internal/fr"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
+	"github.com/Josef-Hlink/twin/internal/tysm"
 )
 
 func main() {
@@ -24,8 +25,12 @@ func main() {
 		err = fr.Run(os.Args[2:])
 	case "sybau":
 		err = sybau.Run(os.Args[2:])
+	case "fr-picker":
+		err = fr.RunPicker()
 	case "sybau-picker":
 		err = sybau.RunPicker(os.Args[2:])
+	case "tysm":
+		err = tysm.Run(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)
