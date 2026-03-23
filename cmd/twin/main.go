@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/Josef-Hlink/twin/internal/fr"
+	"github.com/Josef-Hlink/twin/internal/shkspr"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 	"github.com/Josef-Hlink/twin/internal/tysm"
@@ -31,6 +32,8 @@ func main() {
 		err = sybau.RunPicker(os.Args[2:])
 	case "tysm":
 		err = tysm.Run(os.Args[2:])
+	case "shkspr":
+		err = shkspr.Run(os.Args[2:])
 	default:
 		printUsage()
 		os.Exit(1)
@@ -49,6 +52,7 @@ commands:
   tspmo    spin up tmux sessions from recipes
   fr       open a single recipe (fzf picker / name / --list)
   sybau    fzf-based session switcher
+  shkspr   open twin.toml in $EDITOR
 `
 	fmt.Fprint(os.Stderr, usage)
 }
