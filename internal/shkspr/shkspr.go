@@ -1,6 +1,7 @@
 package shkspr
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,14 +9,31 @@ import (
 	"github.com/Josef-Hlink/twin/internal/config"
 )
 
-// Run opens the twin.toml config file in the user's editor.
+// Run opens the twin.toml config file or the recipes directory in the
+// user's editor.
 func Run(args []string) error {
+	fs := flag.NewFlagSet("shkspr", flag.ContinueOnError)
+	recipes := fs.Bool("recipes", false, "open the recipes directory")
+	fs.BoolVar(recipes, "r", false, "open the recipes directory (shorthand)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
 	editor, err := resolveEditor()
 	if err != nil {
 		return err
 	}
 
-	path := config.ConfigPath()
+	var path string
+	if *recipes {
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		path = cfg.RecipeDir
+	} else {
+		path = config.ConfigPath()
+	}
 
 	cmd := exec.Command(editor, path)
 	cmd.Stdin = os.Stdin
