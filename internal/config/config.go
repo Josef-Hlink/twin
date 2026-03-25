@@ -95,6 +95,11 @@ func ListRecipes(recipeDir string) ([]string, error) {
 	return names, nil
 }
 
+// ConfigPath returns the full path to the twin.toml config file.
+func ConfigPath() string {
+	return filepath.Join(configDir(), "twin.toml")
+}
+
 func configDir() string {
 	if dir := os.Getenv("TWIN_CONFIG_DIR"); dir != "" {
 		return expandPath(dir)
