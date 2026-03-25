@@ -205,3 +205,8 @@ func ClientSize() (width, height int, err error) {
 	h, _ := strconv.Atoi(fields[1])
 	return w, h, nil
 }
+
+// KillServer kills the tmux server, terminating all sessions.
+func KillServer() error {
+	return exec.Command("tmux", "kill-server").Run()
+}
