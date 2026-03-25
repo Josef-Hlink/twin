@@ -37,7 +37,7 @@ func Launch(title string, width, height int, subcommand string) error {
 	if err != nil {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
-	return tmux.DisplayPopup(title, width, height, borderStyle, self+" "+subcommand)
+	return tmux.DisplayPopup(tmux.PopupTopLeft, title, width, height, borderStyle, self+" "+subcommand)
 }
 
 // FzfSelect pipes items to fzf and returns the selected line.
