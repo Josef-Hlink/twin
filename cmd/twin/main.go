@@ -98,7 +98,7 @@ commands:
   pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
   shkspr   open twin.toml in $EDITOR
-  tysm     teardown: kill the tmux server
+  tysm     kill tmux server with a farewell
 
 run 'twin <command> --help' for command-specific help.
 `

@@ -211,6 +211,31 @@ func KillSession(name string) error {
 	return exec.Command("tmux", "kill-session", "-t", name).Run()
 }
 
+// ClientTTY returns the TTY of the current tmux client (e.g. "/dev/ttys001").
+func ClientTTY() (string, error) {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{client_tty}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ClientPID returns the PID of the process that launched the tmux client
+// (typically the parent shell).
+func ClientPID() (string, error) {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{client_pid}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// DetachClient detaches the current tmux client, returning control to the
+// parent terminal.
+func DetachClient() error {
+	return exec.Command("tmux", "detach-client").Run()
+}
+
 // KillServer kills the tmux server, terminating all sessions.
 func KillServer() error {
 	return exec.Command("tmux", "kill-server").Run()
