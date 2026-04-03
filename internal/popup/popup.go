@@ -29,15 +29,20 @@ func Dims(itemCount, maxItemLine, maxPreviewLine, maxPreviewCount int, preview b
 	return width, height
 }
 
-// Launch opens a tmux popup running the given subcommand.
-// It resolves the executable path automatically since the popup shell
-// doesn't inherit PATH context.
+// Launch opens a tmux popup running the given subcommand with the default
+// border style. It resolves the executable path automatically since the
+// popup shell doesn't inherit PATH context.
 func Launch(title string, width, height int, subcommand string) error {
+	return LaunchWithStyle(title, width, height, subcommand, borderStyle)
+}
+
+// LaunchWithStyle opens a tmux popup with a custom border style.
+func LaunchWithStyle(title string, width, height int, subcommand, style string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
-	return tmux.DisplayPopup(tmux.PopupTopLeft, title, width, height, borderStyle, self+" "+subcommand)
+	return tmux.DisplayPopup(tmux.PopupTopLeft, title, width, height, style, self+" "+subcommand)
 }
 
 // FzfSelect pipes items to fzf and returns the selected line.

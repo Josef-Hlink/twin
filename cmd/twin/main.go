@@ -6,6 +6,7 @@ import (
 
 	"github.com/Josef-Hlink/twin/internal/fr"
 	"github.com/Josef-Hlink/twin/internal/icl"
+	"github.com/Josef-Hlink/twin/internal/pbqt"
 	"github.com/Josef-Hlink/twin/internal/shkspr"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
@@ -31,6 +32,10 @@ func main() {
 		err = fr.RunPicker()
 	case "sybau-picker":
 		err = sybau.RunPicker(os.Args[2:])
+	case "pbqt":
+		err = pbqt.Run(os.Args[2:])
+	case "pbqt-picker":
+		err = pbqt.RunPicker()
 	case "icl":
 		err = icl.Run()
 	case "icl-view":
@@ -57,6 +62,7 @@ commands:
   tspmo    spin up tmux sessions from recipes
   fr       open a single recipe (fzf picker / name / --list)
   sybau    fzf-based session switcher
+  pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
   shkspr   open twin.toml in $EDITOR
 `
