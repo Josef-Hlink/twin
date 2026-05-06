@@ -42,13 +42,15 @@ func Run() error {
 			continue
 		}
 
+		// Mark active before the inter-session delay so the spinner animates
+		// during the wait, not just during the brief CreateSession call.
+		p.start(name)
+
 		// Sleep before creating the next session so tmux assigns distinct
 		// creation timestamps, preserving the order from the active list.
 		if ordered && created > 0 {
 			time.Sleep(1 * time.Second)
 		}
-
-		p.start(name)
 
 		if err := CreateSession(name, recipe); err != nil {
 			fmt.Fprintf(os.Stderr, "error creating %s: %v\n", name, err)
