@@ -12,6 +12,15 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 )
 
+const Usage = `usage: twin fr [name | --list] [--no-attach]
+
+open a single tmux session from a recipe.
+  (no args)     fzf picker of recipes without an open session
+  <name>        open the named recipe (or attach if it already exists)
+  --list        print all available recipe names
+  --no-attach   don't auto-attach after creating the session
+`
+
 // Run opens a single tmux session from a recipe.
 // With no args it launches a popup picker (or inline fzf outside tmux);
 // with a name arg it opens directly and auto-attaches;

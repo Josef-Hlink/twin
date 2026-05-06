@@ -9,6 +9,12 @@ import (
 	"github.com/Josef-Hlink/twin/internal/config"
 )
 
+const Usage = `usage: twin shkspr [--recipes | -r]
+
+open twin.toml in $EDITOR (or vim/nano if unset).
+  --recipes, -r open the recipes directory instead of twin.toml
+`
+
 // Run opens the twin.toml config file or the recipes directory in the
 // user's editor.
 func Run(args []string) error {

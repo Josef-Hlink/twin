@@ -12,6 +12,15 @@ import (
 
 const borderStyle = "fg=red bold"
 
+const Usage = `usage: twin pbqt [name]
+
+kill a tmux session.
+  (no args)     fzf popup picker of running sessions
+  <name>        kill the named session directly
+killing the current session switches away first, or falls back to tysm
+if it's the last session.
+`
+
 // Run kills a tmux session by name or launches a popup picker.
 func Run(args []string) error {
 	if len(args) > 0 {
