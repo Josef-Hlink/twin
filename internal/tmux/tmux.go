@@ -206,6 +206,11 @@ func ClientSize() (width, height int, err error) {
 	return w, h, nil
 }
 
+// KillSession kills a single tmux session by name.
+func KillSession(name string) error {
+	return exec.Command("tmux", "kill-session", "-t", name).Run()
+}
+
 // KillServer kills the tmux server, terminating all sessions.
 func KillServer() error {
 	return exec.Command("tmux", "kill-server").Run()
