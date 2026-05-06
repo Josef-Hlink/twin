@@ -18,6 +18,17 @@ const (
 
 var frames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
+const (
+	cReset  = "\033[0m"
+	cGreen  = "\033[32m"
+	cCyan   = "\033[36m"
+	cPurple = "\033[35m"
+)
+
+func paint(c, s string) string {
+	return c + s + cReset
+}
+
 type line struct {
 	name   string
 	status status
@@ -142,15 +153,16 @@ func (p *progress) render() {
 	for _, l := range p.lines {
 		seq++
 		prefix := fmt.Sprintf("[%d/%d]", seq, p.total)
+		name := paint(cPurple, l.name)
 		switch l.status {
 		case pending:
-			fmt.Printf("\033[2K%s %s …\n", prefix, l.name)
+			fmt.Printf("\033[2K%s %s …\n", prefix, name)
 		case active:
-			fmt.Printf("\033[2K%s %s %s\n", prefix, l.name, frames[p.frame])
+			fmt.Printf("\033[2K%s %s %s\n", prefix, name, paint(cCyan, frames[p.frame]))
 		case done:
-			fmt.Printf("\033[2K%s %s ✓\n", prefix, l.name)
+			fmt.Printf("\033[2K%s %s %s\n", prefix, name, paint(cGreen, "✓"))
 		case skipped:
-			fmt.Printf("\033[2K%s %s ✓ (already exists)\n", prefix, l.name)
+			fmt.Printf("\033[2K%s %s %s (already exists)\n", prefix, name, paint(cGreen, "✓"))
 		}
 	}
 }
