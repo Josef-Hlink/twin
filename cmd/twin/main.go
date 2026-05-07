@@ -13,27 +13,51 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tysm"
 )
 
+var helps = map[string]string{
+	"tspmo":  tspmo.Usage,
+	"fr":     fr.Usage,
+	"sybau":  sybau.Usage,
+	"pbqt":   pbqt.Usage,
+	"icl":    icl.Usage,
+	"shkspr": shkspr.Usage,
+	"tysm":   tysm.Usage,
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		printUsage()
+		printUsage(os.Stderr)
 		os.Exit(1)
+	}
+
+	sub := os.Args[1]
+	args := os.Args[2:]
+
+	if sub == "-h" || sub == "--help" {
+		printUsage(os.Stdout)
+		return
+	}
+	if wantsHelp(args) {
+		if u, ok := helps[sub]; ok {
+			fmt.Print(u)
+			return
+		}
 	}
 
 	var err error
 
-	switch os.Args[1] {
+	switch sub {
 	case "tspmo":
 		err = tspmo.Run()
 	case "fr":
-		err = fr.Run(os.Args[2:])
+		err = fr.Run(args)
 	case "sybau":
-		err = sybau.Run(os.Args[2:])
+		err = sybau.Run(args)
 	case "fr-picker":
 		err = fr.RunPicker()
 	case "sybau-picker":
-		err = sybau.RunPicker(os.Args[2:])
+		err = sybau.RunPicker(args)
 	case "pbqt":
-		err = pbqt.Run(os.Args[2:])
+		err = pbqt.Run(args)
 	case "pbqt-picker":
 		err = pbqt.RunPicker()
 	case "icl":
@@ -41,22 +65,31 @@ func main() {
 	case "icl-view":
 		err = icl.RunView()
 	case "tysm":
-		err = tysm.Run(os.Args[2:])
+		err = tysm.Run(args)
 	case "shkspr":
-		err = shkspr.Run(os.Args[2:])
+		err = shkspr.Run(args)
 	default:
-		printUsage()
+		printUsage(os.Stderr)
 		os.Exit(1)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "twin %s: %v\n", os.Args[1], err)
+		fmt.Fprintf(os.Stderr, "twin %s: %v\n", sub, err)
 		os.Exit(1)
 	}
 }
 
-func printUsage() {
-	const usage = `usage: twin <command>
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+func printUsage(w *os.File) {
+	const usage = `usage: twin <command> [args]
 
 commands:
   tspmo    spin up tmux sessions from recipes
@@ -65,6 +98,9 @@ commands:
   pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
   shkspr   open twin.toml in $EDITOR
+  tysm     teardown: kill the tmux server
+
+run 'twin <command> --help' for command-specific help.
 `
-	fmt.Fprint(os.Stderr, usage)
+	fmt.Fprint(w, usage)
 }

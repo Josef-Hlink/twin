@@ -10,6 +10,12 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
+const Usage = `usage: twin sybau [--preview]
+
+fzf-based session switcher in a tmux popup.
+  --preview     show each session's windows in a right-side preview pane
+`
+
 // Run launches a tmux popup containing the fzf session picker.
 func Run(args []string) error {
 	preview := slices.Contains(args, "--preview")

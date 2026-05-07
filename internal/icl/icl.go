@@ -21,6 +21,15 @@ type claudePane struct {
 	state   byte   // '*' busy, '&' menu, '-' idle
 }
 
+const Usage = `usage: twin icl
+
+interactive tabbed quickview of running claude agent panes.
+  H / left      previous tab
+  L / right     next tab
+  Enter         switch to the selected pane
+  q / Esc       close
+`
+
 // Run spawns a centered tmux popup showing the interactive Claude quickview.
 func Run() error {
 	panes, err := findClaudePanes()

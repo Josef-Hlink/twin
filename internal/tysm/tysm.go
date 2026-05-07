@@ -7,6 +7,12 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
+const Usage = `usage: twin tysm [--message <text> | -m <text>]
+
+teardown: kill the tmux server and print a farewell message.
+  --message, -m custom farewell message
+`
+
 // Run loads the config, and just kills the tmux server.
 func Run(args []string) error {
 	fs := flag.NewFlagSet("tysm", flag.ContinueOnError)

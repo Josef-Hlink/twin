@@ -13,6 +13,13 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
+const Usage = `usage: twin tspmo
+
+spin up tmux sessions from active recipes in twin.toml.
+sessions whose name already exists are skipped (✓ already exists).
+attaches to auto-attach-to from config, or prompts otherwise.
+`
+
 // Run loads the config, reads active recipes, and creates tmux sessions.
 func Run() error {
 	cfg, err := config.Load()
