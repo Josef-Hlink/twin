@@ -50,6 +50,19 @@ active = ["front", "back", "infra"]
 
 `active` controls which recipes `twin tspmo` spins up.
 
+### Popup colors
+
+Each subcommand that uses a popup picker (`fr`, `sybau`, `pbqt`, `icl`) has a configurable accent color that paints both the tmux popup border and fzf's pointer/marker, so the picker reads as one themed surface.
+
+```toml
+fr-border-color    = "green"      # default: green
+sybau-border-color = "magenta"    # default: magenta
+pbqt-border-color  = "red"        # default: red
+icl-border-color   = "colour214"  # default: colour214 (orange)
+```
+
+Values accept any form both tools take: a named color (`red`, `magenta`, `cyan`, …), a 256-color index (`214` or `colour214`), or hex (`#ff8800`).
+
 ## Recipes
 
 Each recipe is a TOML file in the recipe directory. The filename becomes the session name.

@@ -20,13 +20,18 @@ fzf-based session switcher in a tmux popup.
 func Run(args []string) error {
 	preview := slices.Contains(args, "--preview")
 
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
 	sessions, err := tmux.ListSessions()
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
 
 	current, _ := tmux.CurrentSession()
-	numbered := showNumbers()
+	numbered := cfg.IsOrderedSessions()
 
 	// Calculate popup dimensions from actual content, skipping the current session.
 	count := 0
@@ -61,7 +66,7 @@ func Run(args []string) error {
 	if preview {
 		cmd += " --preview"
 	}
-	return popup.Launch("sybau", width, height, cmd)
+	return popup.Launch("sybau", width, height, cmd, cfg.BorderColor("sybau"))
 }
 
 // RunPicker lists tmux sessions, lets the user pick one via fzf, and switches to it.
@@ -69,13 +74,18 @@ func Run(args []string) error {
 func RunPicker(args []string) error {
 	preview := slices.Contains(args, "--preview")
 
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
 	sessions, err := tmux.ListSessions()
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
 	}
 
 	current, _ := tmux.CurrentSession()
-	numbered := showNumbers()
+	numbered := cfg.IsOrderedSessions()
 
 	// Build display lines with original indices, skipping the current session.
 	var lines []string
@@ -105,7 +115,7 @@ func RunPicker(args []string) error {
 		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	}
 
-	selected, err := popup.FzfSelect(lines, previewCols, previewCmd)
+	selected, err := popup.FzfSelect(lines, previewCols, previewCmd, cfg.BorderColor("sybau"))
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -146,13 +156,3 @@ func windowMetrics(sessions []string, skip string) (maxLine, maxCount int) {
 	return maxLine, maxCount
 }
 
-// showNumbers returns true if session numbers should be displayed in the picker.
-// This is tied to the ordered-sessions config option — numbers only make sense
-// when sessions have a meaningful order.
-func showNumbers() bool {
-	cfg, err := config.Load()
-	if err != nil {
-		return false
-	}
-	return cfg.IsOrderedSessions()
-}

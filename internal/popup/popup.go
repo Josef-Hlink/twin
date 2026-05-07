@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
@@ -13,7 +14,6 @@ const (
 	chromeWidth       = 5 // fzf prompt + padding + tmux popup border (left/right)
 	chromeHeight      = 4 // fzf prompt + status + tmux popup border (top/bottom)
 	previewExtraWidth = 3 // preview border-left + padding
-	borderStyle       = "fg=magenta bold"
 )
 
 // Dims computes popup width and height from content metrics.
@@ -29,26 +29,35 @@ func Dims(itemCount, maxItemLine, maxPreviewLine, maxPreviewCount int, preview b
 	return width, height
 }
 
-// Launch opens a tmux popup running the given subcommand with the default
-// border style. It resolves the executable path automatically since the
-// popup shell doesn't inherit PATH context.
-func Launch(title string, width, height int, subcommand string) error {
-	return LaunchWithStyle(title, width, height, subcommand, borderStyle)
+// Launch opens a tmux popup at the top-left running the given subcommand,
+// with the border styled in `color`.
+func Launch(title string, width, height int, subcommand string, color config.Color) error {
+	return launch(tmux.PopupTopLeft, title, width, height, subcommand, color)
 }
 
-// LaunchWithStyle opens a tmux popup with a custom border style.
-func LaunchWithStyle(title string, width, height int, subcommand, style string) error {
+// LaunchCenter opens a tmux popup centered on screen.
+func LaunchCenter(title string, width, height int, subcommand string, color config.Color) error {
+	return launch(tmux.PopupCenter, title, width, height, subcommand, color)
+}
+
+func launch(anchor tmux.PopupAnchor, title string, width, height int, subcommand string, color config.Color) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
-	return tmux.DisplayPopup(tmux.PopupTopLeft, title, width, height, style, self+" "+subcommand)
+	style := fmt.Sprintf("fg=%s bold", color.Tmux())
+	return tmux.DisplayPopup(anchor, title, width, height, style, self+" "+subcommand)
 }
 
 // FzfSelect pipes items to fzf and returns the selected line.
 // When previewCols > 0 and previewCmd is non-empty, a preview pane is shown.
-func FzfSelect(items []string, previewCols int, previewCmd string) (string, error) {
+// When accent is non-empty, fzf's pointer + marker are colored to match.
+func FzfSelect(items []string, previewCols int, previewCmd string, accent config.Color) (string, error) {
 	var fzfArgs []string
+	if accent != "" {
+		c := accent.Fzf()
+		fzfArgs = append(fzfArgs, "--color", fmt.Sprintf("pointer:%s,marker:%s", c, c))
+	}
 	if previewCols > 0 && previewCmd != "" {
 		fzfArgs = append(fzfArgs,
 			"--preview", previewCmd,
