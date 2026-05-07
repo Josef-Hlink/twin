@@ -11,11 +11,15 @@ import (
 
 // Config represents the top-level twin.toml file.
 type Config struct {
-	RecipeDir       string   `toml:"recipe-dir"`
-	Active          []string `toml:"active"`
-	OrderedSessions *bool    `toml:"ordered-sessions"`
-	AutoAttachTo    string   `toml:"auto-attach-to"`
-	TysmMsg         string   `toml:"tysm-msg"`
+	RecipeDir        string   `toml:"recipe-dir"`
+	Active           []string `toml:"active"`
+	OrderedSessions  *bool    `toml:"ordered-sessions"`
+	AutoAttachTo     string   `toml:"auto-attach-to"`
+	TysmMsg          string   `toml:"tysm-msg"`
+	FrBorderColor    string   `toml:"fr-border-color"`
+	SybauBorderColor string   `toml:"sybau-border-color"`
+	PbqtBorderColor  string   `toml:"pbqt-border-color"`
+	IclBorderColor   string   `toml:"icl-border-color"`
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays
@@ -25,6 +29,28 @@ func (c Config) IsOrderedSessions() bool {
 		return true
 	}
 	return *c.OrderedSessions
+}
+
+// BorderColor returns the popup border + fzf accent color for the given
+// subcommand, falling back to the per-command default when unset.
+func (c Config) BorderColor(cmd string) Color {
+	var raw, def string
+	switch cmd {
+	case "fr":
+		raw, def = c.FrBorderColor, "green"
+	case "sybau":
+		raw, def = c.SybauBorderColor, "magenta"
+	case "pbqt":
+		raw, def = c.PbqtBorderColor, "red"
+	case "icl":
+		raw, def = c.IclBorderColor, "colour214"
+	default:
+		return Color("magenta")
+	}
+	if raw == "" {
+		return Color(def)
+	}
+	return Color(raw)
 }
 
 // Window represents a single window in a recipe.

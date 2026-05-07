@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/Josef-Hlink/twin/internal/config"
+	"github.com/Josef-Hlink/twin/internal/popup"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
@@ -41,9 +43,9 @@ func Run() error {
 		return nil
 	}
 
-	self, err := os.Executable()
+	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("resolving executable path: %w", err)
+		return err
 	}
 
 	clientW, clientH, _ := tmux.ClientSize()
@@ -56,7 +58,7 @@ func Run() error {
 		height = 10
 	}
 
-	return tmux.DisplayPopup(tmux.PopupCenter, "icl", width, height, "fg=colour214,bold", self+" icl-view")
+	return popup.LaunchCenter("icl", width, height, "icl-view", cfg.BorderColor("icl"))
 }
 
 // RunView renders the interactive tabbed Claude pane viewer. Runs inside the popup.

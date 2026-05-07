@@ -10,8 +10,6 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tysm"
 )
 
-const borderStyle = "fg=red bold"
-
 const Usage = `usage: twin pbqt [name]
 
 kill a tmux session.
@@ -32,6 +30,11 @@ func Run(args []string) error {
 // RunPicker runs inside the tmux popup spawned by pick.
 // It lists sessions, lets the user pick one via fzf, and kills it.
 func RunPicker() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
 	sessions, err := tmux.ListSessions()
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
@@ -42,10 +45,10 @@ func RunPicker() error {
 	}
 
 	current, _ := tmux.CurrentSession()
-	numbered := showNumbers()
+	numbered := cfg.IsOrderedSessions()
 	lines := buildLines(sessions, current, numbered)
 
-	selected, err := popup.FzfSelect(lines, 0, "")
+	selected, err := popup.FzfSelect(lines, 0, "", cfg.BorderColor("pbqt"))
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -60,6 +63,11 @@ func RunPicker() error {
 // pick shows a picker of running sessions.
 // Inside tmux it uses a popup; outside it falls back to inline fzf.
 func pick() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
 	sessions, err := tmux.ListSessions()
 	if err != nil {
 		return fmt.Errorf("listing sessions: %w", err)
@@ -69,16 +77,17 @@ func pick() error {
 		return nil
 	}
 
+	color := cfg.BorderColor("pbqt")
+	numbered := cfg.IsOrderedSessions()
 	if tmux.InTmux() {
-		return pickPopup(sessions)
+		return pickPopup(sessions, color, numbered)
 	}
-	return pickInline(sessions)
+	return pickInline(sessions, color, numbered)
 }
 
 // pickPopup launches a tmux popup with the pbqt-picker subcommand.
-func pickPopup(sessions []string) error {
+func pickPopup(sessions []string, color config.Color, numbered bool) error {
 	current, _ := tmux.CurrentSession()
-	numbered := showNumbers()
 	lines := buildLines(sessions, current, numbered)
 
 	maxLine := len("pbqt") // minimum width
@@ -89,15 +98,14 @@ func pickPopup(sessions []string) error {
 	}
 
 	width, height := popup.Dims(len(lines), maxLine, 0, 0, false)
-	return popup.LaunchWithStyle("pbqt", width, height, "pbqt-picker", borderStyle)
+	return popup.Launch("pbqt", width, height, "pbqt-picker", color)
 }
 
 // pickInline shows an inline fzf picker (fallback for outside tmux).
-func pickInline(sessions []string) error {
-	numbered := showNumbers()
+func pickInline(sessions []string, color config.Color, numbered bool) error {
 	lines := buildLines(sessions, "", numbered)
 
-	selected, err := popup.FzfSelect(lines, 0, "")
+	selected, err := popup.FzfSelect(lines, 0, "", color)
 	if err != nil {
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -171,11 +179,3 @@ func stripDecorations(selected string, numbered bool) string {
 	return selected
 }
 
-// showNumbers returns true if session numbers should be displayed.
-func showNumbers() bool {
-	cfg, err := config.Load()
-	if err != nil {
-		return false
-	}
-	return cfg.IsOrderedSessions()
-}
