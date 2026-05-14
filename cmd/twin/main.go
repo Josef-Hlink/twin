@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/Josef-Hlink/twin/internal/fr"
+	"github.com/Josef-Hlink/twin/internal/frfr"
 	"github.com/Josef-Hlink/twin/internal/icl"
 	"github.com/Josef-Hlink/twin/internal/pbqt"
 	"github.com/Josef-Hlink/twin/internal/shkspr"
@@ -16,6 +17,7 @@ import (
 var helps = map[string]string{
 	"tspmo":  tspmo.Usage,
 	"fr":     fr.Usage,
+	"frfr":   frfr.Usage,
 	"sybau":  sybau.Usage,
 	"pbqt":   pbqt.Usage,
 	"icl":    icl.Usage,
@@ -50,6 +52,8 @@ func main() {
 		err = tspmo.Run()
 	case "fr":
 		err = fr.Run(args)
+	case "frfr":
+		err = frfr.Run(args)
 	case "sybau":
 		err = sybau.Run(args)
 	case "fr-picker":
@@ -94,6 +98,7 @@ func printUsage(w *os.File) {
 commands:
   tspmo    spin up tmux sessions from recipes
   fr       open a single recipe (fzf picker / name / --list)
+  frfr     scaffold a new recipe from template.toml and open in $EDITOR
   sybau    fzf-based session switcher
   pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
