@@ -12,7 +12,7 @@ import (
 
 const Usage = `usage: twin tysm [--message <text> | -m <text>]
 
-teardown: kill the tmux server and print a farewell message.
+kill the tmux server and print a farewell message.
   --message, -m custom farewell message
 `
 
