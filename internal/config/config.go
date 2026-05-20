@@ -87,7 +87,36 @@ func Load() (Config, error) {
 	}
 
 	cfg.RecipeDir = expandPath(cfg.RecipeDir)
+	ensureTemplate(cfg.RecipeDir)
 	return cfg, nil
+}
+
+// TemplatePath returns the absolute path to template.toml inside recipeDir.
+func TemplatePath(recipeDir string) string {
+	return filepath.Join(recipeDir, "template.toml")
+}
+
+// templateContent is the body of the scaffolded template.toml.
+const templateContent = `start-directory = "~/"
+
+[[windows]]
+`
+
+// ensureTemplate writes template.toml into recipeDir if it doesn't already
+// exist. Silent no-op if recipeDir is missing or the write fails — frfr will
+// surface a useful error later if the user actually tries to use the template.
+func ensureTemplate(recipeDir string) {
+	if recipeDir == "" {
+		return
+	}
+	if _, err := os.Stat(recipeDir); err != nil {
+		return
+	}
+	path := TemplatePath(recipeDir)
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	_ = os.WriteFile(path, []byte(templateContent), 0o644)
 }
 
 // LoadRecipe reads a recipe TOML file from the recipe directory.
@@ -116,7 +145,11 @@ func ListRecipes(recipeDir string) ([]string, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".toml") {
 			continue
 		}
-		names = append(names, strings.TrimSuffix(e.Name(), ".toml"))
+		name := strings.TrimSuffix(e.Name(), ".toml")
+		if name == "template" {
+			continue
+		}
+		names = append(names, name)
 	}
 	return names, nil
 }
@@ -169,9 +202,10 @@ commands = ["cd ${GOPATH:-$HOME/go}/bin && ls -la twin"]
 `, configDirVar())
 
 	files := map[string]string{
-		filepath.Join(dir, "twin.toml"):       cfgContent,
-		filepath.Join(recipeDir, "home.toml"): homeRecipe,
-		filepath.Join(recipeDir, "twin.toml"): twinRecipe,
+		filepath.Join(dir, "twin.toml"):           cfgContent,
+		filepath.Join(recipeDir, "home.toml"):     homeRecipe,
+		filepath.Join(recipeDir, "twin.toml"):     twinRecipe,
+		filepath.Join(recipeDir, "template.toml"): templateContent,
 	}
 
 	for path, content := range files {
