@@ -1,0 +1,69 @@
+version: 2
+
+project_name: twin
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: twin
+    main: ./cmd/twin
+    binary: twin
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+archives:
+  - id: twin
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+      - '^test:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: twin
+    repository:
+      owner: Josef-Hlink
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/Josef-Hlink/twin
+    description: tmux workspace manager driven by TOML recipes
+    license: MIT
+    dependencies:
+      - name: tmux
+      - name: fzf
+    install: |
+      bin.install "twin"
+    test: |
+      system "#{bin}/twin", "--version"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore(formula): bump {{ .ProjectName }} to {{ .Tag }}"
