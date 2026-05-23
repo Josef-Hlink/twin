@@ -14,6 +14,9 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tysm"
 )
 
+// version is set at build time via ldflags by GoReleaser.
+var version = "dev"
+
 var helps = map[string]string{
 	"tspmo":  tspmo.Usage,
 	"fr":     fr.Usage,
@@ -36,6 +39,10 @@ func main() {
 
 	if sub == "-h" || sub == "--help" {
 		printUsage(os.Stdout)
+		return
+	}
+	if sub == "--version" {
+		fmt.Println(version)
 		return
 	}
 	if wantsHelp(args) {
