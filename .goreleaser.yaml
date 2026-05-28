@@ -67,3 +67,23 @@ brews:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "chore(formula): bump {{ .ProjectName }} to {{ .Tag }}"
+
+nix:
+  - name: twin
+    ids:
+      - twin
+    repository:
+      owner: Josef-Hlink
+      name: nur-packages
+      branch: main
+      token: "{{ .Env.NIX_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/Josef-Hlink/twin
+    description: tmux workspace manager driven by TOML recipes
+    license: mit
+    dependencies:
+      - tmux
+      - fzf
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "chore(nix): bump {{ .ProjectName }} to {{ .Tag }}"
