@@ -14,6 +14,7 @@ const (
 	active
 	done
 	skipped
+	failed
 )
 
 var frames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -23,6 +24,7 @@ const (
 	cGreen  = "\033[32m"
 	cCyan   = "\033[36m"
 	cPurple = "\033[35m"
+	cRed    = "\033[31m"
 )
 
 func paint(c, s string) string {
@@ -32,6 +34,7 @@ func paint(c, s string) string {
 type line struct {
 	name   string
 	status status
+	note   string // failure reason, shown after halt in TTY mode
 }
 
 // progress renders real-time session creation feedback.
@@ -42,6 +45,7 @@ type progress struct {
 	lines    []line
 	total    int
 	done_    int // count of done+skipped
+	failed_  int // count of recipes that failed to start
 	isTTY    bool
 	frame    int
 	rendered bool
@@ -114,6 +118,21 @@ func (p *progress) skip(name string) {
 	}
 }
 
+func (p *progress) fail(name string, reason error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if i := p.indexOf(name); i >= 0 {
+		p.lines[i].status = failed
+		p.lines[i].note = reason.Error()
+		p.failed_++
+	}
+	if p.isTTY {
+		p.render()
+	} else {
+		fmt.Printf("[%d/%d] %s ✗ (%v)\n", p.done_+p.failed_, p.total, name, reason)
+	}
+}
+
 // halt stops the spinner goroutine and does a final render.
 func (p *progress) halt() {
 	if p.isTTY {
@@ -121,6 +140,20 @@ func (p *progress) halt() {
 		p.mu.Lock()
 		p.render()
 		p.mu.Unlock()
+	}
+}
+
+// reportFailures prints the reason for each failed recipe. Only needed in TTY
+// mode, where render() shows just a ✗ to keep the animation lines from wrapping;
+// the non-TTY path already prints reasons inline.
+func (p *progress) reportFailures() {
+	if !p.isTTY {
+		return
+	}
+	for _, l := range p.lines {
+		if l.status == failed {
+			fmt.Fprintf(os.Stderr, "%s %s: %s\n", paint(cRed, "✗"), l.name, l.note)
+		}
 	}
 }
 
@@ -163,6 +196,8 @@ func (p *progress) render() {
 			fmt.Printf("\033[2K%s %s %s\n", prefix, name, paint(cGreen, "✓"))
 		case skipped:
 			fmt.Printf("\033[2K%s %s %s (already exists)\n", prefix, name, paint(cGreen, "✓"))
+		case failed:
+			fmt.Printf("\033[2K%s %s %s\n", prefix, name, paint(cRed, "✗"))
 		}
 	}
 }

@@ -45,7 +45,7 @@ func Run() error {
 
 		recipe, err := config.LoadRecipe(cfg.RecipeDir, name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "skipping %s: %v\n", name, err)
+			p.fail(name, err)
 			continue
 		}
 
@@ -60,7 +60,7 @@ func Run() error {
 		}
 
 		if err := CreateSession(name, recipe); err != nil {
-			fmt.Fprintf(os.Stderr, "error creating %s: %v\n", name, err)
+			p.fail(name, err)
 			continue
 		}
 
@@ -69,6 +69,13 @@ func Run() error {
 	}
 
 	p.halt()
+	p.reportFailures()
+
+	// Fail loud if any active recipe couldn't start. Done before auto-attach so
+	// the failure summary isn't buried behind an attached session.
+	if p.failed_ > 0 {
+		return fmt.Errorf("%d recipe(s) failed to start", p.failed_)
+	}
 
 	// Auto-attach after session creation.
 	if p.done_ == 0 {
