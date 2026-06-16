@@ -90,14 +90,40 @@ commands = ["make run"]
 - `start-directory` on a window is relative to the recipe's top-level start-directory
 - `commands` is optional; if omitted the window just opens a shell
 - `~` and environment variables are expanded in paths
-- No pane/split support — one pane per window, keep it simple
+
+**Panes** (optional) — a window can be split into multiple panes instead of
+holding a single shell:
+```toml
+[[windows]]
+  [[windows.panes]]
+  commands = ["nvim"]          # pane 1 = the window's base pane
+
+  [[windows.panes]]
+  split = "right"              # new pane goes to the right of pane 1
+  size  = "30%"
+  commands = ["lazygit"]       # pane 2
+
+  [[windows.panes]]
+  split = "down"               # splits pane 2 (the previous pane)
+  size  = "50%"
+  start-directory = "logs/"
+  commands = ["tail -f app.log"]
+  focus = true                 # focus this pane when the window opens
+```
+- Pane 1 is the window's base pane; later panes split an earlier one
+- `split-from = <N>` (1-based pane number) chooses which pane to split; omitted defaults to the **previous** pane
+- `split` is `"right"` (side-by-side) or `"down"` (stacked); defaults to `"right"`
+- `size` is a percentage like `"30%"`, optional (tmux splits evenly when omitted). **% is relative to the pane being split**, not the whole window — needs tmux ≥3.1
+- `commands` and `start-directory` work per-pane (start-directory relative to the window's)
+- `focus = true` focuses that pane on open (default is pane 1); only one pane per window may set it
+- A window uses **either** window-level `commands` (single pane, the simple form above) **or** `panes`, never both
 
 ### Subcommand behavior
 
 **`twin tspmo`** (no additional args):
 1. Load twin.toml config
 2. Read the `active` list
-3. For each active recipe: parse the TOML, create a tmux session with windows/commands
+3. For each active recipe: parse the TOML, create a tmux session with windows/panes/commands
 4. Skip recipes whose session name already exists (idempotent)
 5. Show real-time spinner progress (braille animation in TTY, plain lines otherwise)
 6. When `ordered-sessions` is true (default), add 1s delay between spawns to preserve order

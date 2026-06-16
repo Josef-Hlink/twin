@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -53,16 +54,74 @@ func (c Config) BorderColor(cmd string) Color {
 	return Color(raw)
 }
 
+// Pane represents a single pane within a window.
+type Pane struct {
+	StartDirectory string   `toml:"start-directory"`
+	Commands       []string `toml:"commands"`
+	SplitFrom      int      `toml:"split-from"` // 1-based pane number; 0 = previous pane
+	Split          string   `toml:"split"`      // "right" | "down"; defaults to "right"
+	Size           string   `toml:"size"`       // e.g. "30%"; optional (even split when empty)
+	Focus          bool     `toml:"focus"`      // focus this pane on open; default is pane 1
+}
+
 // Window represents a single window in a recipe.
 type Window struct {
 	StartDirectory string   `toml:"start-directory"`
 	Commands       []string `toml:"commands"`
+	Panes          []Pane   `toml:"panes"`
 }
 
 // Recipe represents a single recipe TOML file.
 type Recipe struct {
 	StartDirectory string   `toml:"start-directory"`
 	Windows        []Window `toml:"windows"`
+}
+
+// sizeRe matches a pane size like "30%".
+var sizeRe = regexp.MustCompile(`^\d+%$`)
+
+// Validate checks recipe-level invariants that the TOML decoder can't catch,
+// returning a friendly error pointing at the offending window/pane.
+func (r Recipe) Validate() error {
+	for wi, w := range r.Windows {
+		wn := wi + 1 // 1-based for messages
+
+		if len(w.Commands) > 0 && len(w.Panes) > 0 {
+			return fmt.Errorf("window %d: use either commands or panes, not both", wn)
+		}
+
+		focused := 0
+		for pi, p := range w.Panes {
+			pn := pi + 1
+
+			if pi == 0 {
+				// Pane 1 is the window's base pane; it isn't split off anything.
+				if p.Split != "" || p.SplitFrom != 0 || p.Size != "" {
+					return fmt.Errorf("window %d pane 1: the first pane is the base pane and can't set split/split-from/size", wn)
+				}
+			} else {
+				if p.SplitFrom < 0 || p.SplitFrom > pi {
+					return fmt.Errorf("window %d pane %d: split-from %d references a pane that doesn't exist yet", wn, pn, p.SplitFrom)
+				}
+				switch p.Split {
+				case "", "right", "down":
+				default:
+					return fmt.Errorf("window %d pane %d: split must be \"right\" or \"down\", got %q", wn, pn, p.Split)
+				}
+				if p.Size != "" && !sizeRe.MatchString(p.Size) {
+					return fmt.Errorf("window %d pane %d: size must look like \"30%%\", got %q", wn, pn, p.Size)
+				}
+			}
+
+			if p.Focus {
+				focused++
+			}
+		}
+		if focused > 1 {
+			return fmt.Errorf("window %d: only one pane may set focus = true", wn)
+		}
+	}
+	return nil
 }
 
 // Load reads twin.toml from the config directory.
@@ -102,6 +161,16 @@ func TemplatePath(recipeDir string) string {
 const templateContent = `start-directory = "~/"
 
 [[windows]]
+# commands = ["nvim"]
+
+# split a window into panes instead of using window-level commands:
+# [[windows]]
+#   [[windows.panes]]
+#   commands = ["nvim"]
+#   [[windows.panes]]
+#   split = "right"   # or "down"; defaults to right
+#   size  = "30%"     # optional, relative to the split pane
+#   commands = ["lazygit"]
 `
 
 // ensureRecipeDir guarantees recipeDir exists and contains a template.toml,
@@ -140,6 +209,9 @@ func LoadRecipe(recipeDir, name string) (Recipe, error) {
 	}
 
 	r.StartDirectory = expandPath(r.StartDirectory)
+	if err := r.Validate(); err != nil {
+		return r, fmt.Errorf("invalid recipe %s: %w", path, err)
+	}
 	return r, nil
 }
 
@@ -194,7 +266,13 @@ func scaffold(dir string) error {
 	homeRecipe := `start-directory = "~/"
 
 [[windows]]
-commands = ["ls -lAh"]
+  [[windows.panes]]
+  commands = ["ls -lAh"]
+
+  [[windows.panes]]
+  split = "right"
+  size = "35%"
+  commands = ["echo \"twin supports panes — see template.toml\""]
 
 [[windows]]
 start-directory = ".config/"

@@ -123,52 +123,106 @@ func attachTarget(cfg config.Config) (string, error) {
 	return "", nil
 }
 
-// CreateSession builds a tmux session from a recipe: creates windows and sends commands.
+// CreateSession builds a tmux session from a recipe: creates windows, splits
+// panes, and sends commands.
 func CreateSession(name string, recipe config.Recipe) error {
-	// The first window is created with the session itself (window index 1,
-	// since tmux base-index is commonly 1, but we use the default here).
 	baseDir := recipe.StartDirectory
 
-	firstWindowDir := baseDir
-	if len(recipe.Windows) > 0 && recipe.Windows[0].StartDirectory != "" {
-		firstWindowDir = filepath.Join(baseDir, recipe.Windows[0].StartDirectory)
-	}
-
-	if err := tmux.NewSession(name, firstWindowDir); err != nil {
-		return fmt.Errorf("new-session: %w", err)
-	}
-
-	// Send commands to the first window.
-	if len(recipe.Windows) > 0 {
-		for _, cmd := range recipe.Windows[0].Commands {
-			if err := tmux.SendKeys(name+":1", cmd); err != nil {
-				return fmt.Errorf("send-keys to %s:1: %w", name, err)
-			}
-		}
-	}
-
-	// Create remaining windows (index 2, 3, ...).
-	for i := 1; i < len(recipe.Windows); i++ {
-		w := recipe.Windows[i]
-		winDir := baseDir
+	for i, w := range recipe.Windows {
+		// windowDir is where the window's base pane opens; a per-pane
+		// start-directory on pane 1 narrows it further (matching window dirs).
+		windowDir := baseDir
 		if w.StartDirectory != "" {
-			winDir = filepath.Join(baseDir, w.StartDirectory)
+			windowDir = filepath.Join(baseDir, w.StartDirectory)
+		}
+		basePaneDir := windowDir
+		if len(w.Panes) > 0 && w.Panes[0].StartDirectory != "" {
+			basePaneDir = filepath.Join(windowDir, w.Panes[0].StartDirectory)
 		}
 
-		target := fmt.Sprintf("%s:%d", name, i+1)
-		if err := tmux.NewWindow(target, winDir); err != nil {
-			return fmt.Errorf("new-window %s: %w", target, err)
-		}
-
-		for _, cmd := range w.Commands {
-			if err := tmux.SendKeys(target, cmd); err != nil {
-				return fmt.Errorf("send-keys to %s: %w", target, err)
+		// The first window is created with the session itself; the rest are
+		// new windows. Both hand back the base pane's stable pane-id.
+		var basePaneID string
+		var err error
+		if i == 0 {
+			if basePaneID, err = tmux.NewSession(name, basePaneDir); err != nil {
+				return fmt.Errorf("new-session: %w", err)
 			}
+		} else {
+			target := fmt.Sprintf("%s:%d", name, i+1)
+			if basePaneID, err = tmux.NewWindow(target, basePaneDir); err != nil {
+				return fmt.Errorf("new-window %s: %w", target, err)
+			}
+		}
+
+		if err := buildWindow(basePaneID, w, windowDir); err != nil {
+			return fmt.Errorf("window %d: %w", i+1, err)
 		}
 	}
 
 	// Select the first window so the session starts there.
 	tmux.SelectWindow(name + ":1")
 
+	return nil
+}
+
+// buildWindow populates an already-created window. With no panes it sends the
+// window-level commands to the base pane (the original single-pane behavior).
+// With panes it splits the tree, sends per-pane commands, and focuses one pane.
+func buildWindow(basePaneID string, w config.Window, windowDir string) error {
+	if len(w.Panes) == 0 {
+		return sendCommands(basePaneID, w.Commands)
+	}
+
+	paneIDs := make([]string, len(w.Panes))
+	paneIDs[0] = basePaneID
+	if err := sendCommands(basePaneID, w.Panes[0].Commands); err != nil {
+		return err
+	}
+
+	for i := 1; i < len(w.Panes); i++ {
+		p := w.Panes[i]
+
+		// split-from is 1-based; 0 means the previous pane.
+		targetIdx := i - 1
+		if p.SplitFrom > 0 {
+			targetIdx = p.SplitFrom - 1
+		}
+
+		paneDir := windowDir
+		if p.StartDirectory != "" {
+			paneDir = filepath.Join(windowDir, p.StartDirectory)
+		}
+
+		id, err := tmux.SplitPane(paneIDs[targetIdx], paneDir, p.Split, p.Size)
+		if err != nil {
+			return fmt.Errorf("split pane %d: %w", i+1, err)
+		}
+		paneIDs[i] = id
+
+		if err := sendCommands(id, p.Commands); err != nil {
+			return err
+		}
+	}
+
+	// Focus the requested pane, defaulting to the base pane.
+	focus := paneIDs[0]
+	for i, p := range w.Panes {
+		if p.Focus {
+			focus = paneIDs[i]
+		}
+	}
+	tmux.SelectPane(focus)
+
+	return nil
+}
+
+// sendCommands dispatches each command to a tmux target (pane-id or window).
+func sendCommands(target string, commands []string) error {
+	for _, cmd := range commands {
+		if err := tmux.SendKeys(target, cmd); err != nil {
+			return fmt.Errorf("send-keys to %s: %w", target, err)
+		}
+	}
 	return nil
 }

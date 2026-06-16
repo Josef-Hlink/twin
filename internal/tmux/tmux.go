@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
+	"unsafe"
 )
 
 // HasSession returns true if a tmux session with the given name exists.
@@ -16,18 +18,65 @@ func HasSession(name string) bool {
 	return err == nil
 }
 
-// NewSession creates a new detached tmux session.
-func NewSession(name, startDir string) error {
-	return exec.Command("tmux", "new-session", "-d", "-s", name, "-c", startDir).Run()
+// NewSession creates a new detached tmux session and returns the pane-id
+// (e.g. "%3") of its first window's base pane.
+//
+// The session is sized to the destination terminal via -x/-y. Without this a
+// detached session falls back to tmux's 80x24 default-size, so pane split
+// percentages are computed against that tiny grid; when the session is later
+// attached to a larger terminal tmux spreads the extra space across panes,
+// dragging every non-50% split toward 50%. Creating at the final size keeps
+// the percentages honest. Falls back to tmux's default when the size is
+// unknown (e.g. stdout isn't a terminal).
+func NewSession(name, startDir string) (string, error) {
+	args := []string{"new-session", "-d", "-s", name, "-c", startDir}
+	if cols, rows := SessionSize(); cols > 0 && rows > 0 {
+		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
+	}
+	args = append(args, "-P", "-F", "#{pane_id}")
+	return paneIDOf(exec.Command("tmux", args...))
 }
 
-// NewWindow creates a new window in an existing session.
-// target is "session:index" (e.g. "front:2").
-func NewWindow(target, startDir string) error {
-	return exec.Command("tmux", "new-window", "-t", target, "-c", startDir).Run()
+// NewWindow creates a new window in an existing session and returns the pane-id
+// of its base pane. target is "session:index" (e.g. "front:2").
+func NewWindow(target, startDir string) (string, error) {
+	return paneIDOf(exec.Command("tmux", "new-window", "-t", target,
+		"-c", startDir, "-P", "-F", "#{pane_id}"))
 }
 
-// SendKeys sends keystrokes to a tmux target (e.g. "front:1").
+// SplitPane splits the pane identified by targetPaneID and returns the new
+// pane's pane-id. direction is "down" for a stacked split (-v) or anything else
+// for a side-by-side split (-h). size, when non-empty, is a tmux size such as
+// "30%" (requires tmux >= 3.1); empty means an even split.
+func SplitPane(targetPaneID, startDir, direction, size string) (string, error) {
+	args := []string{"split-window", "-t", targetPaneID, "-c", startDir}
+	if direction == "down" {
+		args = append(args, "-v")
+	} else {
+		args = append(args, "-h")
+	}
+	if size != "" {
+		args = append(args, "-l", size)
+	}
+	args = append(args, "-P", "-F", "#{pane_id}")
+	return paneIDOf(exec.Command("tmux", args...))
+}
+
+// SelectPane focuses the pane identified by paneID (e.g. "%3").
+func SelectPane(paneID string) error {
+	return exec.Command("tmux", "select-pane", "-t", paneID).Run()
+}
+
+// paneIDOf runs a tmux command that prints a pane-id and returns it trimmed.
+func paneIDOf(cmd *exec.Cmd) (string, error) {
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// SendKeys sends keystrokes to a tmux target (e.g. "front:1" or a pane-id "%3").
 func SendKeys(target, keys string) error {
 	return exec.Command("tmux", "send-keys", "-t", target, keys, "C-m").Run()
 }
@@ -204,6 +253,38 @@ func ClientSize() (width, height int, err error) {
 	w, _ := strconv.Atoi(fields[0])
 	h, _ := strconv.Atoi(fields[1])
 	return w, h, nil
+}
+
+// SessionSize returns the columns and rows a new detached session should be
+// created at so that pane split percentages match the terminal it ends up on.
+// Inside tmux it uses the current client (we'll switch-client into the new
+// session); outside tmux it measures stdout directly (we'll attach into it).
+// Returns (0, 0) when the size can't be determined, leaving tmux's default.
+func SessionSize() (cols, rows int) {
+	if InTmux() {
+		if w, h, err := ClientSize(); err == nil && w > 0 && h > 0 {
+			return w, h
+		}
+	}
+	return terminalSize()
+}
+
+// terminalSize asks the kernel for the size of the terminal on stdout via the
+// TIOCGWINSZ ioctl. Returns (0, 0) when stdout isn't a terminal (e.g. a pipe).
+func terminalSize() (cols, rows int) {
+	var ws struct {
+		Row, Col, Xpixel, Ypixel uint16
+	}
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		os.Stdout.Fd(),
+		uintptr(syscall.TIOCGWINSZ),
+		uintptr(unsafe.Pointer(&ws)),
+	)
+	if errno != 0 {
+		return 0, 0
+	}
+	return int(ws.Col), int(ws.Row)
 }
 
 // KillSession kills a single tmux session by name.

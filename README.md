@@ -90,6 +90,35 @@ commands = ["make run"]
 - `commands` is optional; omit it for a plain shell
 - `~` and environment variables are expanded in paths
 
+### Panes
+
+A window can be split into multiple panes instead of holding a single shell:
+
+```toml
+[[windows]]
+  [[windows.panes]]
+  commands = ["nvim"]          # pane 1 — the window's base pane
+
+  [[windows.panes]]
+  split = "right"              # new pane to the right of pane 1
+  size  = "30%"
+  commands = ["lazygit"]
+
+  [[windows.panes]]
+  split = "down"               # splits the previous pane
+  size  = "50%"
+  start-directory = "logs/"
+  commands = ["tail -f app.log"]
+  focus = true                 # focus this pane when the window opens
+```
+
+- pane 1 is the base pane; later panes split an earlier one
+- `split` is `"right"` (side-by-side) or `"down"` (stacked); defaults to `"right"`
+- `split-from = <N>` (1-based) chooses which pane to split; omit it to split the previous pane
+- `size` is a percentage like `"30%"`, optional — it's relative to the pane being split (needs tmux ≥3.1)
+- `commands`, `start-directory`, and `focus = true` (one per window) work per-pane
+- a window uses **either** window-level `commands` or `panes`, never both
+
 ## Subcommands
 
 ### `twin tspmo`
