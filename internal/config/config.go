@@ -87,7 +87,9 @@ func Load() (Config, error) {
 	}
 
 	cfg.RecipeDir = expandPath(cfg.RecipeDir)
-	ensureTemplate(cfg.RecipeDir)
+	if err := ensureRecipeDir(cfg.RecipeDir); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
@@ -102,21 +104,30 @@ const templateContent = `start-directory = "~/"
 [[windows]]
 `
 
-// ensureTemplate writes template.toml into recipeDir if it doesn't already
-// exist. Silent no-op if recipeDir is missing or the write fails — frfr will
-// surface a useful error later if the user actually tries to use the template.
-func ensureTemplate(recipeDir string) {
+// ensureRecipeDir guarantees recipeDir exists and contains a template.toml,
+// creating both if missing. This is what makes twin usable when twin.toml is
+// present (e.g. symlinked from dotfiles) but the recipe-dir was never created.
+func ensureRecipeDir(recipeDir string) error {
 	if recipeDir == "" {
-		return
+		return fmt.Errorf("recipe-dir is not set in twin.toml")
 	}
-	if _, err := os.Stat(recipeDir); err != nil {
-		return
+	created := false
+	if _, err := os.Stat(recipeDir); os.IsNotExist(err) {
+		created = true
+	}
+	if err := os.MkdirAll(recipeDir, 0o755); err != nil {
+		return fmt.Errorf("creating recipe dir %s: %w", recipeDir, err)
 	}
 	path := TemplatePath(recipeDir)
-	if _, err := os.Stat(path); err == nil {
-		return
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(templateContent), 0o644); err != nil {
+			return fmt.Errorf("writing template %s: %w", path, err)
+		}
 	}
-	_ = os.WriteFile(path, []byte(templateContent), 0o644)
+	if created {
+		fmt.Printf("recipe-dir %s was missing — created it with a template.toml\n", recipeDir)
+	}
+	return nil
 }
 
 // LoadRecipe reads a recipe TOML file from the recipe directory.
