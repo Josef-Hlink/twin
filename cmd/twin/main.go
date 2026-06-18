@@ -109,7 +109,7 @@ commands:
   sybau    fzf-based session switcher
   pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
-  shkspr   open twin.toml in $EDITOR
+  shkspr   open twin.toml in $EDITOR (or a recipe by name)
   tysm     kill tmux server with a farewell
 
 run 'twin <command> --help' for command-specific help.
