@@ -1,28 +1,26 @@
 package shkspr
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/Josef-Hlink/twin/internal/config"
 )
 
-const Usage = `usage: twin shkspr [--recipes | -r]
+const Usage = `usage: twin shkspr [recipe]
 
 open twin.toml in $EDITOR (or vim/nano if unset).
-  --recipes, -r open the recipes directory instead of twin.toml
+  recipe  open that recipe file instead (e.g. "twin shkspr dots" -> dots.toml)
 `
 
-// Run opens the twin.toml config file or the recipes directory in the
-// user's editor.
+// Run opens the twin.toml config file, or a single recipe file when a recipe
+// name is given, in the user's editor.
 func Run(args []string) error {
-	fs := flag.NewFlagSet("shkspr", flag.ContinueOnError)
-	recipes := fs.Bool("recipes", false, "open the recipes directory")
-	fs.BoolVar(recipes, "r", false, "open the recipes directory (shorthand)")
-	if err := fs.Parse(args); err != nil {
-		return err
+	if len(args) > 1 {
+		return fmt.Errorf("expected at most one recipe name, got %d", len(args))
 	}
 
 	editor, err := resolveEditor()
@@ -31,12 +29,13 @@ func Run(args []string) error {
 	}
 
 	var path string
-	if *recipes {
+	if len(args) == 1 {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
-		path = cfg.RecipeDir
+		name := strings.TrimSuffix(args[0], ".toml")
+		path = filepath.Join(cfg.RecipeDir, name+".toml")
 	} else {
 		path = config.ConfigPath()
 	}
