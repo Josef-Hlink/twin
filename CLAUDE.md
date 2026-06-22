@@ -168,6 +168,10 @@ popup shell doesn't inherit PATH context.
 
 ### Building
 
+The Go toolchain comes from a per-project nix devShell (`flake.nix`), not a global
+install. direnv auto-loads it on `cd` into the repo; if direnv is off, run `nix develop`
+to enter the shell manually.
+
 ```sh
 go build ./cmd/twin    # produces ./twin binary
 ```
