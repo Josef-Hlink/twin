@@ -61,6 +61,10 @@ active = ["front", "back", "infra"]
 # also enables session numbering in sybau picker. defaults to true.
 ordered-sessions = true
 
+# optional: cap how many rows the popup pickers (fr/sybau/pbqt) are sized for.
+# fzf scrolls through any options beyond the cap. omitted/0 = grow to fit all.
+max-options = 10
+
 # optional: auto-attach to this session after tspmo finishes (must be in active list).
 # if omitted, tspmo prompts the user.
 auto-attach-to = "front"

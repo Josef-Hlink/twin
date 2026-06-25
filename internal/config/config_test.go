@@ -2,6 +2,27 @@ package config
 
 import "testing"
 
+func TestOptionCap(t *testing.T) {
+	ptr := func(n int) *int { return &n }
+	tests := []struct {
+		name string
+		cfg  Config
+		want int
+	}{
+		{"unset", Config{}, 0},
+		{"zero", Config{MaxOptions: ptr(0)}, 0},
+		{"negative", Config{MaxOptions: ptr(-3)}, 0},
+		{"positive", Config{MaxOptions: ptr(8)}, 8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.OptionCap(); got != tt.want {
+				t.Fatalf("OptionCap() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRecipeValidate(t *testing.T) {
 	tests := []struct {
 		name    string

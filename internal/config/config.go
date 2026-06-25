@@ -15,6 +15,7 @@ type Config struct {
 	RecipeDir        string   `toml:"recipe-dir"`
 	Active           []string `toml:"active"`
 	OrderedSessions  *bool    `toml:"ordered-sessions"`
+	MaxOptions       *int     `toml:"max-options"`
 	AutoAttachTo     string   `toml:"auto-attach-to"`
 	TysmMsg          string   `toml:"tysm-msg"`
 	FrBorderColor    string   `toml:"fr-border-color"`
@@ -30,6 +31,16 @@ func (c Config) IsOrderedSessions() bool {
 		return true
 	}
 	return *c.OrderedSessions
+}
+
+// OptionCap returns the maximum number of list rows a popup picker is sized
+// for; fzf scrolls through any options beyond it. Returns 0 (no cap — the popup
+// grows to fit every option) when unset or non-positive.
+func (c Config) OptionCap() int {
+	if c.MaxOptions == nil || *c.MaxOptions < 1 {
+		return 0
+	}
+	return *c.MaxOptions
 }
 
 // BorderColor returns the popup border + fzf accent color for the given

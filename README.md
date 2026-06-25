@@ -63,6 +63,16 @@ icl-border-color   = "colour214"  # default: colour214 (orange)
 
 Values accept any form both tools take: a named color (`red`, `magenta`, `cyan`, …), a 256-color index (`214` or `colour214`), or hex (`#ff8800`).
 
+### Popup size
+
+By default the list pickers (`fr`, `sybau`, `pbqt`) grow their popup to fit every option, which gets tall and thin with a long list. `max-options` caps how many rows the popup is sized for; fzf scrolls through the rest and shows its `matched/total` count so you can tell more options exist.
+
+```toml
+max-options = 10   # omit (or 0) to grow the popup to fit every option
+```
+
+The cap applies only to the tmux popup. Outside tmux the pickers fall back to inline fzf, which manages its own height.
+
 ## Recipes
 
 Each recipe is a TOML file in the recipe directory. The filename becomes the session name.

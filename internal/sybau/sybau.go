@@ -60,7 +60,7 @@ func Run(args []string) error {
 		maxPreviewLine, maxWindowCount = windowMetrics(sessions, current)
 	}
 
-	width, height := popup.Dims(count, maxListLine, maxPreviewLine, maxWindowCount, preview)
+	width, height := popup.Dims(count, maxListLine, cfg.OptionCap(), maxPreviewLine, maxWindowCount, preview)
 
 	cmd := "sybau-picker"
 	if preview {
@@ -155,4 +155,3 @@ func windowMetrics(sessions []string, skip string) (maxLine, maxCount int) {
 	}
 	return maxLine, maxCount
 }
-
