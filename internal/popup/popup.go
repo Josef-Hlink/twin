@@ -18,8 +18,12 @@ const (
 
 // Dims computes popup width and height from content metrics.
 // When preview is false, the preview columns are ignored and the popup
-// is sized for the list alone.
-func Dims(itemCount, maxItemLine, maxPreviewLine, maxPreviewCount int, preview bool) (width, height int) {
+// is sized for the list alone. maxItems, when > 0, caps the number of list
+// rows the popup is sized for; fzf scrolls through any items beyond it.
+func Dims(itemCount, maxItemLine, maxItems, maxPreviewLine, maxPreviewCount int, preview bool) (width, height int) {
+	if maxItems > 0 && itemCount > maxItems {
+		itemCount = maxItems
+	}
 	width = maxItemLine + chromeWidth
 	height = itemCount + chromeHeight
 	if preview {

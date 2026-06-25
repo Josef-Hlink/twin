@@ -130,13 +130,13 @@ func pick() error {
 
 	color := cfg.BorderColor("fr")
 	if tmux.InTmux() {
-		return pickPopup(available, color)
+		return pickPopup(available, color, cfg.OptionCap())
 	}
 	return pickInline(available, color)
 }
 
 // pickPopup launches a tmux popup with the fr-picker subcommand.
-func pickPopup(available []string, color config.Color) error {
+func pickPopup(available []string, color config.Color, optionCap int) error {
 	maxLine := len("fr") // minimum width
 	for _, name := range available {
 		if len(name) > maxLine {
@@ -144,7 +144,7 @@ func pickPopup(available []string, color config.Color) error {
 		}
 	}
 
-	width, height := popup.Dims(len(available), maxLine, 0, 0, false)
+	width, height := popup.Dims(len(available), maxLine, optionCap, 0, 0, false)
 	return popup.Launch("fr", width, height, "fr-picker", color)
 }
 

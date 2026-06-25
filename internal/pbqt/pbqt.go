@@ -80,13 +80,13 @@ func pick() error {
 	color := cfg.BorderColor("pbqt")
 	numbered := cfg.IsOrderedSessions()
 	if tmux.InTmux() {
-		return pickPopup(sessions, color, numbered)
+		return pickPopup(sessions, color, numbered, cfg.OptionCap())
 	}
 	return pickInline(sessions, color, numbered)
 }
 
 // pickPopup launches a tmux popup with the pbqt-picker subcommand.
-func pickPopup(sessions []string, color config.Color, numbered bool) error {
+func pickPopup(sessions []string, color config.Color, numbered bool, optionCap int) error {
 	current, _ := tmux.CurrentSession()
 	lines := buildLines(sessions, current, numbered)
 
@@ -97,7 +97,7 @@ func pickPopup(sessions []string, color config.Color, numbered bool) error {
 		}
 	}
 
-	width, height := popup.Dims(len(lines), maxLine, 0, 0, false)
+	width, height := popup.Dims(len(lines), maxLine, optionCap, 0, 0, false)
 	return popup.Launch("pbqt", width, height, "pbqt-picker", color)
 }
 
@@ -178,4 +178,3 @@ func stripDecorations(selected string, numbered bool) string {
 	selected = strings.TrimSuffix(selected, " *")
 	return selected
 }
-
