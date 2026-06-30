@@ -171,12 +171,12 @@ func CreateSession(name string, recipe config.Recipe) error {
 // With panes it splits the tree, sends per-pane commands, and focuses one pane.
 func buildWindow(basePaneID string, w config.Window, windowDir string) error {
 	if len(w.Panes) == 0 {
-		return sendCommands(basePaneID, w.Commands)
+		return sendCommands(basePaneID, w.Cmds())
 	}
 
 	paneIDs := make([]string, len(w.Panes))
 	paneIDs[0] = basePaneID
-	if err := sendCommands(basePaneID, w.Panes[0].Commands); err != nil {
+	if err := sendCommands(basePaneID, w.Panes[0].Cmds()); err != nil {
 		return err
 	}
 
@@ -200,7 +200,7 @@ func buildWindow(basePaneID string, w config.Window, windowDir string) error {
 		}
 		paneIDs[i] = id
 
-		if err := sendCommands(id, p.Commands); err != nil {
+		if err := sendCommands(id, p.Cmds()); err != nil {
 			return err
 		}
 	}
