@@ -76,23 +76,24 @@ start-directory = "~/Developer/pro/my-frontend/"
 
 [[windows]]
 start-directory = "src/"    # relative to recipe start-directory
-commands = ["nvim"]
+command = "nvim"
 
 [[windows]]
 # empty window, just a shell
 
 [[windows]]
-commands = ["lazygit"]
+command = "lazygit"
 
 [[windows]]
-commands = ["make run"]
+commands = ["npm install", "make run"]  # list = each entry on its own shell line
 ```
 
 - Session name = recipe filename (front.toml -> session "front")
 - `start-directory` at the top level is required
 - `windows` is an ordered array; window names are optional (tmux shows the active command by default)
 - `start-directory` on a window is relative to the recipe's top-level start-directory
-- `commands` is optional; if omitted the window just opens a shell
+- `command = "x"` runs a single command; if omitted the window just opens a shell
+- `commands = ["x", "y"]` runs each entry as its own shell line (a short setup sequence). A window uses `command` **or** `commands`, never both
 - `~` and environment variables are expanded in paths
 
 **Panes** (optional) — a window can be split into multiple panes instead of
@@ -100,27 +101,27 @@ holding a single shell:
 ```toml
 [[windows]]
   [[windows.panes]]
-  commands = ["nvim"]          # pane 1 = the window's base pane
+  command = "nvim"             # pane 1 = the window's base pane
 
   [[windows.panes]]
   split = "right"              # new pane goes to the right of pane 1
   size  = "30%"
-  commands = ["lazygit"]       # pane 2
+  command = "lazygit"          # pane 2
 
   [[windows.panes]]
   split = "down"               # splits pane 2 (the previous pane)
   size  = "50%"
   start-directory = "logs/"
-  commands = ["tail -f app.log"]
+  command = "tail -f app.log"
   focus = true                 # focus this pane when the window opens
 ```
 - Pane 1 is the window's base pane; later panes split an earlier one
 - `split-from = <N>` (1-based pane number) chooses which pane to split; omitted defaults to the **previous** pane
 - `split` is `"right"` (side-by-side) or `"down"` (stacked); defaults to `"right"`
 - `size` is a percentage like `"30%"`, optional (tmux splits evenly when omitted). **% is relative to the pane being split**, not the whole window — needs tmux ≥3.1
-- `commands` and `start-directory` work per-pane (start-directory relative to the window's)
+- `command`/`commands` and `start-directory` work per-pane (start-directory relative to the window's)
 - `focus = true` focuses that pane on open (default is pane 1); only one pane per window may set it
-- A window uses **either** window-level `commands` (single pane, the simple form above) **or** `panes`, never both
+- A window uses **either** window-level `command`/`commands` (single pane, the simple form above) **or** `panes`, never both
 
 ### Subcommand behavior
 

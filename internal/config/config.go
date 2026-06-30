@@ -68,7 +68,8 @@ func (c Config) BorderColor(cmd string) Color {
 // Pane represents a single pane within a window.
 type Pane struct {
 	StartDirectory string   `toml:"start-directory"`
-	Commands       []string `toml:"commands"`
+	Command        string   `toml:"command"`    // single command; mutually exclusive with commands
+	Commands       []string `toml:"commands"`   // command list; mutually exclusive with command
 	SplitFrom      int      `toml:"split-from"` // 1-based pane number; 0 = previous pane
 	Split          string   `toml:"split"`      // "right" | "down"; defaults to "right"
 	Size           string   `toml:"size"`       // e.g. "30%"; optional (even split when empty)
@@ -78,9 +79,25 @@ type Pane struct {
 // Window represents a single window in a recipe.
 type Window struct {
 	StartDirectory string   `toml:"start-directory"`
-	Commands       []string `toml:"commands"`
+	Command        string   `toml:"command"`  // single command; mutually exclusive with commands
+	Commands       []string `toml:"commands"` // command list; mutually exclusive with command
 	Panes          []Pane   `toml:"panes"`
 }
+
+// chooseCommands returns the effective command list, preferring the singular
+// command over the commands list. Validate guarantees they're never both set.
+func chooseCommands(command string, commands []string) []string {
+	if command != "" {
+		return []string{command}
+	}
+	return commands
+}
+
+// Cmds returns the window's effective commands (singular command or the list).
+func (w Window) Cmds() []string { return chooseCommands(w.Command, w.Commands) }
+
+// Cmds returns the pane's effective commands (singular command or the list).
+func (p Pane) Cmds() []string { return chooseCommands(p.Command, p.Commands) }
 
 // Recipe represents a single recipe TOML file.
 type Recipe struct {
@@ -97,13 +114,20 @@ func (r Recipe) Validate() error {
 	for wi, w := range r.Windows {
 		wn := wi + 1 // 1-based for messages
 
-		if len(w.Commands) > 0 && len(w.Panes) > 0 {
-			return fmt.Errorf("window %d: use either commands or panes, not both", wn)
+		if (w.Command != "" || len(w.Commands) > 0) && len(w.Panes) > 0 {
+			return fmt.Errorf("window %d: use either command(s) or panes, not both", wn)
+		}
+		if w.Command != "" && len(w.Commands) > 0 {
+			return fmt.Errorf("window %d: use either command or commands, not both", wn)
 		}
 
 		focused := 0
 		for pi, p := range w.Panes {
 			pn := pi + 1
+
+			if p.Command != "" && len(p.Commands) > 0 {
+				return fmt.Errorf("window %d pane %d: use either command or commands, not both", wn, pn)
+			}
 
 			if pi == 0 {
 				// Pane 1 is the window's base pane; it isn't split off anything.
@@ -172,16 +196,17 @@ func TemplatePath(recipeDir string) string {
 const templateContent = `start-directory = "~/"
 
 [[windows]]
-# commands = ["nvim"]
+# command = "nvim"                          # a single command
+# commands = ["npm install", "make run"]    # or a list, one shell line each
 
-# split a window into panes instead of using window-level commands:
+# split a window into panes instead of using window-level command(s):
 # [[windows]]
 #   [[windows.panes]]
-#   commands = ["nvim"]
+#   command = "nvim"
 #   [[windows.panes]]
 #   split = "right"   # or "down"; defaults to right
 #   size  = "30%"     # optional, relative to the split pane
-#   commands = ["lazygit"]
+#   command = "lazygit"
 `
 
 // ensureRecipeDir guarantees recipeDir exists and contains a template.toml,
@@ -278,16 +303,16 @@ func scaffold(dir string) error {
 
 [[windows]]
   [[windows.panes]]
-  commands = ["ls -lAh"]
+  command = "ls -lAh"
 
   [[windows.panes]]
   split = "right"
   size = "35%"
-  commands = ["echo \"twin supports panes — see template.toml\""]
+  command = "echo \"twin supports panes — see template.toml\""
 
 [[windows]]
 start-directory = ".config/"
-commands = ["if [ -d nvim ]; then vim nvim/; elif [ -f ~/.vimrc ]; then vim ~/.vimrc; fi"]
+command = "if [ -d nvim ]; then vim nvim/; elif [ -f ~/.vimrc ]; then vim ~/.vimrc; fi"
 
 [[windows]]
 commands = ["cd ` + configDirVar() + `", "echo \"hi twin, here are your recipes:\"", "cat recipes/*.toml"]
@@ -298,7 +323,7 @@ commands = ["cd ` + configDirVar() + `", "echo \"hi twin, here are your recipes:
 [[windows]]
 
 [[windows]]
-commands = ["cd ${GOPATH:-$HOME/go}/bin && ls -la twin"]
+command = "cd ${GOPATH:-$HOME/go}/bin && ls -la twin"
 `, configDirVar())
 
 	files := map[string]string{

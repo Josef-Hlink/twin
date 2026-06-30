@@ -40,6 +40,39 @@ func TestRecipeValidate(t *testing.T) {
 			}},
 		},
 		{
+			name: "window with command only",
+			recipe: Recipe{Windows: []Window{
+				{Command: "nvim"},
+			}},
+		},
+		{
+			name: "pane with command only",
+			recipe: Recipe{Windows: []Window{
+				{Panes: []Pane{{Command: "nvim"}}},
+			}},
+		},
+		{
+			name: "window with command and commands",
+			recipe: Recipe{Windows: []Window{
+				{Command: "nvim", Commands: []string{"ls"}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "window with command and panes",
+			recipe: Recipe{Windows: []Window{
+				{Command: "nvim", Panes: []Pane{{Command: "ls"}}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "pane with command and commands",
+			recipe: Recipe{Windows: []Window{
+				{Panes: []Pane{{Command: "nvim", Commands: []string{"ls"}}}},
+			}},
+			wantErr: true,
+		},
+		{
 			name: "valid pane tree",
 			recipe: Recipe{Windows: []Window{
 				{Panes: []Pane{
@@ -123,4 +156,41 @@ func TestRecipeValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCmds(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		commands []string
+		want     []string
+	}{
+		{"command only", "nvim", nil, []string{"nvim"}},
+		{"commands only", "", []string{"cd src", "make"}, []string{"cd src", "make"}},
+		{"command wins over commands", "nvim", []string{"ls"}, []string{"nvim"}},
+		{"neither", "", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := Window{Command: tt.command, Commands: tt.commands}
+			p := Pane{Command: tt.command, Commands: tt.commands}
+			for _, got := range [][]string{w.Cmds(), p.Cmds()} {
+				if !equalStrings(got, tt.want) {
+					t.Fatalf("Cmds() = %#v, want %#v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

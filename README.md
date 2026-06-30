@@ -83,21 +83,24 @@ start-directory = "~/Developer/pro/my-frontend/"
 
 [[windows]]
 start-directory = "src/"
-commands = ["nvim"]
+command = "nvim"
 
 [[windows]]
 # empty window — just a shell
 
 [[windows]]
-commands = ["lazygit"]
+command = "lazygit"
 
 [[windows]]
-commands = ["make run"]
+# commands = [...] runs each entry as a separate shell line
+commands = ["npm install", "make run"]
 ```
 
 - `start-directory` (top-level) is required
 - `start-directory` on a window is relative to the recipe's top-level directory
-- `commands` is optional; omit it for a plain shell
+- `command = "x"` runs a single command; omit it for a plain shell
+- `commands = ["x", "y"]` runs each entry as its own shell line — handy for a short
+  setup sequence (or just chain with `&&`). Use `command` **or** `commands`, not both
 - `~` and environment variables are expanded in paths
 
 ### Panes
@@ -107,18 +110,18 @@ A window can be split into multiple panes instead of holding a single shell:
 ```toml
 [[windows]]
   [[windows.panes]]
-  commands = ["nvim"]          # pane 1 — the window's base pane
+  command = "nvim"             # pane 1 — the window's base pane
 
   [[windows.panes]]
   split = "right"              # new pane to the right of pane 1
   size  = "30%"
-  commands = ["lazygit"]
+  command = "lazygit"
 
   [[windows.panes]]
   split = "down"               # splits the previous pane
   size  = "50%"
   start-directory = "logs/"
-  commands = ["tail -f app.log"]
+  command = "tail -f app.log"
   focus = true                 # focus this pane when the window opens
 ```
 
@@ -126,8 +129,8 @@ A window can be split into multiple panes instead of holding a single shell:
 - `split` is `"right"` (side-by-side) or `"down"` (stacked); defaults to `"right"`
 - `split-from = <N>` (1-based) chooses which pane to split; omit it to split the previous pane
 - `size` is a percentage like `"30%"`, optional — it's relative to the pane being split (needs tmux ≥3.1)
-- `commands`, `start-directory`, and `focus = true` (one per window) work per-pane
-- a window uses **either** window-level `commands` or `panes`, never both
+- `command`/`commands`, `start-directory`, and `focus = true` (one per window) work per-pane
+- a window uses **either** `command`/`commands` or `panes`, never both
 
 ## Subcommands
 
