@@ -155,6 +155,7 @@ popup shell doesn't inherit PATH context.
 **`twin shkspr`** — open config in `$EDITOR` (falls back to vim, then nano):
 - `twin shkspr` — open `twin.toml`
 - `twin shkspr <recipe>` — open `<recipe-dir>/<recipe>.toml` (a trailing `.toml` is trimmed, so `dots` and `dots.toml` are equivalent)
+- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux)
 - Opening a recipe name that doesn't exist yet drops you into the editor on a fresh file — a quick way to start a new recipe
 
 **Teardown**: not a twin concern — just use `tmux kill-server` or kill individual sessions manually.
