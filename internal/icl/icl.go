@@ -239,8 +239,8 @@ const (
 	ansiOrange  = "\033[38;5;214m"
 	ansiReverse = "\033[7m"
 	ansiReset   = "\033[0m"
-	ansiClear = "\033[2J\033[H" // clear screen + cursor home
-	ansiDim   = "\033[2m"
+	ansiClear   = "\033[2J\033[H" // clear screen + cursor home
+	ansiDim     = "\033[2m"
 )
 
 // render draws the full TUI: tab bar, separator, preview, status line.
