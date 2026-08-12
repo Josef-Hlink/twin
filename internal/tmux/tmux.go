@@ -28,8 +28,13 @@ func HasSession(name string) bool {
 // dragging every non-50% split toward 50%. Creating at the final size keeps
 // the percentages honest. Falls back to tmux's default when the size is
 // unknown (e.g. stdout isn't a terminal).
-func NewSession(name, startDir string) (string, error) {
+// windowName, when non-empty, names the first window; tmux then disables
+// automatic-rename for it, so the name sticks.
+func NewSession(name, startDir, windowName string) (string, error) {
 	args := []string{"new-session", "-d", "-s", name, "-c", startDir}
+	if windowName != "" {
+		args = append(args, "-n", windowName)
+	}
 	if cols, rows := SessionSize(); cols > 0 && rows > 0 {
 		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
 	}
@@ -38,10 +43,15 @@ func NewSession(name, startDir string) (string, error) {
 }
 
 // NewWindow creates a new window in an existing session and returns the pane-id
-// of its base pane. target is "session:index" (e.g. "front:2").
-func NewWindow(target, startDir string) (string, error) {
-	return paneIDOf(exec.Command("tmux", "new-window", "-t", target,
-		"-c", startDir, "-P", "-F", "#{pane_id}"))
+// of its base pane. target is "session:index" (e.g. "front:2"). windowName,
+// when non-empty, names the window (disabling automatic-rename for it).
+func NewWindow(target, startDir, windowName string) (string, error) {
+	args := []string{"new-window", "-t", target, "-c", startDir}
+	if windowName != "" {
+		args = append(args, "-n", windowName)
+	}
+	args = append(args, "-P", "-F", "#{pane_id}")
+	return paneIDOf(exec.Command("tmux", args...))
 }
 
 // SplitPane splits the pane identified by targetPaneID and returns the new
@@ -65,6 +75,19 @@ func SplitPane(targetPaneID, startDir, direction, size string) (string, error) {
 // SelectPane focuses the pane identified by paneID (e.g. "%3").
 func SelectPane(paneID string) error {
 	return exec.Command("tmux", "select-pane", "-t", paneID).Run()
+}
+
+// SetPaneTitle sets the title of the pane identified by paneID. The title only
+// renders when the window's pane-border-status option is "top" or "bottom".
+func SetPaneTitle(paneID, title string) error {
+	return exec.Command("tmux", "select-pane", "-t", paneID, "-T", title).Run()
+}
+
+// EnablePaneBorderStatus turns on pane borders with titles for the window
+// containing paneID (-w resolves a pane target to its window).
+func EnablePaneBorderStatus(paneID string) error {
+	return exec.Command("tmux", "set-option", "-w", "-t", paneID,
+		"pane-border-status", "top").Run()
 }
 
 // paneIDOf runs a tmux command that prints a pane-id and returns it trimmed.

@@ -145,12 +145,12 @@ func CreateSession(name string, recipe config.Recipe) error {
 		var basePaneID string
 		var err error
 		if i == 0 {
-			if basePaneID, err = tmux.NewSession(name, basePaneDir); err != nil {
+			if basePaneID, err = tmux.NewSession(name, basePaneDir, w.Name); err != nil {
 				return fmt.Errorf("new-session: %w", err)
 			}
 		} else {
 			target := fmt.Sprintf("%s:%d", name, i+1)
-			if basePaneID, err = tmux.NewWindow(target, basePaneDir); err != nil {
+			if basePaneID, err = tmux.NewWindow(target, basePaneDir, w.Name); err != nil {
 				return fmt.Errorf("new-window %s: %w", target, err)
 			}
 		}
@@ -176,6 +176,7 @@ func buildWindow(basePaneID string, w config.Window, windowDir string) error {
 
 	paneIDs := make([]string, len(w.Panes))
 	paneIDs[0] = basePaneID
+	setPaneTitle(basePaneID, w.Panes[0].Title)
 	if err := sendCommands(basePaneID, w.Panes[0].Cmds()); err != nil {
 		return err
 	}
@@ -199,9 +200,19 @@ func buildWindow(basePaneID string, w config.Window, windowDir string) error {
 			return fmt.Errorf("split pane %d: %w", i+1, err)
 		}
 		paneIDs[i] = id
+		setPaneTitle(id, p.Title)
 
 		if err := sendCommands(id, p.Cmds()); err != nil {
 			return err
+		}
+	}
+
+	// Titles are invisible in stock tmux; turn on the pane border for this
+	// window when any pane declares one, leaving other windows untouched.
+	for _, p := range w.Panes {
+		if p.Title != "" {
+			tmux.EnablePaneBorderStatus(basePaneID)
+			break
 		}
 	}
 
@@ -215,6 +226,13 @@ func buildWindow(basePaneID string, w config.Window, windowDir string) error {
 	tmux.SelectPane(focus)
 
 	return nil
+}
+
+// setPaneTitle applies a recipe pane title, ignoring empty ones.
+func setPaneTitle(paneID, title string) {
+	if title != "" {
+		tmux.SetPaneTitle(paneID, title)
+	}
 }
 
 // sendCommands dispatches each command to a tmux target (pane-id or window).
