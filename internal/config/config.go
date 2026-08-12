@@ -67,6 +67,7 @@ func (c Config) BorderColor(cmd string) Color {
 
 // Pane represents a single pane within a window.
 type Pane struct {
+	Title          string   `toml:"title"` // optional pane title (select-pane -T)
 	StartDirectory string   `toml:"start-directory"`
 	Command        string   `toml:"command"`    // single command; mutually exclusive with commands
 	Commands       []string `toml:"commands"`   // command list; mutually exclusive with command
@@ -78,6 +79,7 @@ type Pane struct {
 
 // Window represents a single window in a recipe.
 type Window struct {
+	Name           string   `toml:"name"` // optional window name (new-window -n)
 	StartDirectory string   `toml:"start-directory"`
 	Command        string   `toml:"command"`  // single command; mutually exclusive with commands
 	Commands       []string `toml:"commands"` // command list; mutually exclusive with command
@@ -196,12 +198,14 @@ func TemplatePath(recipeDir string) string {
 const templateContent = `start-directory = "~/"
 
 [[windows]]
+# name = "editor"                           # optional fixed window name
 # command = "nvim"                          # a single command
 # commands = ["npm install", "make run"]    # or a list, one shell line each
 
 # split a window into panes instead of using window-level command(s):
 # [[windows]]
 #   [[windows.panes]]
+#   title = "vim"     # optional pane title, shown in the pane border
 #   command = "nvim"
 #   [[windows.panes]]
 #   split = "right"   # or "down"; defaults to right

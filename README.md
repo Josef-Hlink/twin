@@ -82,6 +82,7 @@ Each recipe is a TOML file in the recipe directory. The filename becomes the ses
 start-directory = "~/Developer/pro/my-frontend/"
 
 [[windows]]
+name = "editor"
 start-directory = "src/"
 command = "nvim"
 
@@ -98,6 +99,8 @@ commands = ["npm install", "make run"]
 
 - `start-directory` (top-level) is required
 - `start-directory` on a window is relative to the recipe's top-level directory
+- `name = "x"` gives the window a fixed name; without it tmux shows the running
+  command (naming a window disables tmux's automatic-rename for it)
 - `command = "x"` runs a single command; omit it for a plain shell
 - `commands = ["x", "y"]` runs each entry as its own shell line — handy for a short
   setup sequence (or just chain with `&&`). Use `command` **or** `commands`, not both
@@ -110,6 +113,7 @@ A window can be split into multiple panes instead of holding a single shell:
 ```toml
 [[windows]]
   [[windows.panes]]
+  title = "vim"                # optional, shown in the pane border
   command = "nvim"             # pane 1 — the window's base pane
 
   [[windows.panes]]
@@ -130,6 +134,10 @@ A window can be split into multiple panes instead of holding a single shell:
 - `split-from = <N>` (1-based) chooses which pane to split; omit it to split the previous pane
 - `size` is a percentage like `"30%"`, optional — it's relative to the pane being split (needs tmux ≥3.1)
 - `command`/`commands`, `start-directory`, and `focus = true` (one per window) work per-pane
+- `title = "x"` titles a pane; when any pane in a window has one, twin turns on
+  `pane-border-status top` for that window so the titles are actually visible.
+  Programs that set the terminal title (via escape sequences) can overwrite a
+  pane title later — twin sets it once at creation
 - a window uses **either** `command`/`commands` or `panes`, never both
 
 ## Subcommands

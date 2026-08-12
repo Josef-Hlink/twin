@@ -75,6 +75,7 @@ auto-attach-to = "front"
 start-directory = "~/Developer/pro/my-frontend/"
 
 [[windows]]
+name = "editor"             # optional fixed window name
 start-directory = "src/"    # relative to recipe start-directory
 command = "nvim"
 
@@ -90,7 +91,7 @@ commands = ["npm install", "make run"]  # list = each entry on its own shell lin
 
 - Session name = recipe filename (front.toml -> session "front")
 - `start-directory` at the top level is required
-- `windows` is an ordered array; window names are optional (tmux shows the active command by default)
+- `windows` is an ordered array; `name` is optional — without it tmux shows the active command (an explicit name disables tmux's automatic-rename for that window)
 - `start-directory` on a window is relative to the recipe's top-level start-directory
 - `command = "x"` runs a single command; if omitted the window just opens a shell
 - `commands = ["x", "y"]` runs each entry as its own shell line (a short setup sequence). A window uses `command` **or** `commands`, never both
@@ -101,6 +102,7 @@ holding a single shell:
 ```toml
 [[windows]]
   [[windows.panes]]
+  title = "vim"                # optional pane title, shown in the pane border
   command = "nvim"             # pane 1 = the window's base pane
 
   [[windows.panes]]
@@ -120,6 +122,7 @@ holding a single shell:
 - `split` is `"right"` (side-by-side) or `"down"` (stacked); defaults to `"right"`
 - `size` is a percentage like `"30%"`, optional (tmux splits evenly when omitted). **% is relative to the pane being split**, not the whole window — needs tmux ≥3.1
 - `command`/`commands` and `start-directory` work per-pane (start-directory relative to the window's)
+- `title = "x"` titles a pane (`select-pane -T`); when any pane in a window has one, twin sets window-local `pane-border-status top` so titles are visible. Programs emitting terminal-title escapes can overwrite a title later — twin sets it once at creation
 - `focus = true` focuses that pane on open (default is pane 1); only one pane per window may set it
 - A window uses **either** window-level `command`/`commands` (single pane, the simple form above) **or** `panes`, never both
 
