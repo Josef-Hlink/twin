@@ -182,6 +182,67 @@ func Open(recipeName string, recipe config.Recipe, repo Repo, name string, noAtt
 	return GoTo(session)
 }
 
+// Reopen rebuilds the session of an existing twin from its session name, e.g.
+// after a reboot. It never creates a twin; that's wth's job.
+func Reopen(cfg config.Config, session string, noAttach bool) error {
+	recipeName, name, _ := SplitSession(session)
+	recipe, repo, err := Load(cfg, recipeName)
+	if err != nil {
+		return err
+	}
+	twins, err := repo.List()
+	if err != nil {
+		return err
+	}
+	if _, ok := Find(twins, name); !ok {
+		return fmt.Errorf("no twin %q of %s; hatch one with `twin wth %s`", name, recipeName, session)
+	}
+	return Open(recipeName, recipe, repo, name, noAttach)
+}
+
+// Dormant returns the session names of twins that exist on disk but have no
+// session running, across the given recipes. Recipes that fail to load or
+// aren't in a git repo are skipped.
+func Dormant(cfg config.Config, recipes []string) []string {
+	var sessions []string
+	for _, recipeName := range recipes {
+		recipe, err := config.LoadRecipe(cfg.RecipeDir, recipeName)
+		if err != nil || !mayHaveTwins(recipe.StartDirectory) {
+			continue
+		}
+		repo, err := Locate(recipe.StartDirectory)
+		if err != nil {
+			continue
+		}
+		twins, err := repo.List()
+		if err != nil {
+			continue
+		}
+		for _, t := range twins {
+			if s := SessionName(recipeName, t.Name); !tmux.HasSession(s) {
+				sessions = append(sessions, s)
+			}
+		}
+	}
+	return sessions
+}
+
+// mayHaveTwins reports whether dir or one of its parents has a ".twins"
+// folder next to it, which any repo with twins must have. It's a few stat
+// calls, so pickers can skip a git call for every recipe without twins.
+func mayHaveTwins(dir string) bool {
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	for d := real; d != filepath.Dir(d); d = filepath.Dir(d) {
+		if _, err := os.Stat(d + ".twins"); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // GoTo switches to the named session inside tmux, or attaches to it outside.
 func GoTo(session string) error {
 	if tmux.InTmux() {
