@@ -23,6 +23,8 @@ type Config struct {
 	SybauBorderColor string   `toml:"sybau-border-color"`
 	PbqtBorderColor  string   `toml:"pbqt-border-color"`
 	IclBorderColor   string   `toml:"icl-border-color"`
+	WthBorderColor   string   `toml:"wth-border-color"`
+	WtfBorderColor   string   `toml:"wtf-border-color"`
 	Worktree         Worktree `toml:"worktree"` // shared by every recipe's twins
 }
 
@@ -66,6 +68,10 @@ func (c Config) BorderColor(cmd string) Color {
 		raw, def = c.PbqtBorderColor, "red"
 	case "icl":
 		raw, def = c.IclBorderColor, "colour214"
+	case "wth":
+		raw, def = c.WthBorderColor, "blue"
+	case "wtf":
+		raw, def = c.WtfBorderColor, "yellow"
 	default:
 		return Color("magenta")
 	}

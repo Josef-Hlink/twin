@@ -317,6 +317,29 @@ func terminalSize() (cols, rows int) {
 	return int(ws.Col), int(ws.Row)
 }
 
+// DisplayMessage shows msg on the current client's status line for a few
+// seconds.
+func DisplayMessage(msg string) error {
+	return exec.Command("tmux", "display-message", "-d", "3000", escapeFormat(msg)).Run()
+}
+
+// SwitchAndKill moves the current client to session `to`, shows msg there,
+// and kills session `kill`. It's a single tmux invocation (commands chained
+// with ";"), so the server finishes it even when the caller runs inside the
+// session being killed and dies with it.
+func SwitchAndKill(to, kill, msg string) error {
+	return exec.Command("tmux",
+		"switch-client", "-t", exact(to), ";",
+		"display-message", "-d", "3000", escapeFormat(msg), ";",
+		"kill-session", "-t", exact(kill),
+	).Run()
+}
+
+// escapeFormat keeps tmux from reading a # in msg as the start of a format.
+func escapeFormat(msg string) string {
+	return strings.ReplaceAll(msg, "#", "##")
+}
+
 // KillSession kills a single tmux session by name.
 func KillSession(name string) error {
 	return exec.Command("tmux", "kill-session", "-t", exact(name)).Run()

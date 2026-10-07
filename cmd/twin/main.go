@@ -12,6 +12,8 @@ import (
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 	"github.com/Josef-Hlink/twin/internal/tysm"
+	"github.com/Josef-Hlink/twin/internal/wtf"
+	"github.com/Josef-Hlink/twin/internal/wth"
 )
 
 // version is set at build time via ldflags by GoReleaser.
@@ -26,6 +28,8 @@ var helps = map[string]string{
 	"icl":    icl.Usage,
 	"shkspr": shkspr.Usage,
 	"tysm":   tysm.Usage,
+	"wth":    wth.Usage,
+	"wtf":    wtf.Usage,
 }
 
 func main() {
@@ -79,6 +83,14 @@ func main() {
 		err = tysm.Run(args)
 	case "shkspr":
 		err = shkspr.Run(args)
+	case "wth":
+		err = wth.Run(args)
+	case "wth-picker":
+		err = wth.RunPicker(args)
+	case "wtf":
+		err = wtf.Run(args)
+	case "wtf-picker":
+		err = wtf.RunPicker(args)
 	default:
 		printUsage(os.Stderr)
 		os.Exit(1)
@@ -111,6 +123,8 @@ commands:
   icl      quick-glance at running Claude agent panes
   shkspr   open twin.toml in $EDITOR (or a recipe by name)
   tysm     kill tmux server with a farewell
+  wth      hatch a twin: a git worktree with its own session
+  wtf      fold a twin: remove its worktree and session
 
 run 'twin <command> --help' for command-specific help.
 `
