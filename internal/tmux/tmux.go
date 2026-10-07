@@ -11,10 +11,17 @@ import (
 	"unsafe"
 )
 
+// exact turns a session name into a target that only matches that exact
+// session. A bare -t name falls back to prefix matching, so "twin" would
+// resolve to "twin@blue" whenever no "twin" session exists.
+func exact(name string) string {
+	return "=" + name
+}
+
 // HasSession returns true if a tmux session with the given name exists.
 func HasSession(name string) bool {
 	// tmux has-session exits 0 if the session exists, non-zero otherwise.
-	err := exec.Command("tmux", "has-session", "-t", name).Run()
+	err := exec.Command("tmux", "has-session", "-t", exact(name)).Run()
 	return err == nil
 }
 
@@ -143,13 +150,13 @@ func CurrentSession() (string, error) {
 
 // SwitchClient switches the current tmux client to the named session.
 func SwitchClient(name string) error {
-	return exec.Command("tmux", "switch-client", "-t", name).Run()
+	return exec.Command("tmux", "switch-client", "-t", exact(name)).Run()
 }
 
 // ListWindows returns the windows in a session, formatted as "index:name"
 // with tmux flags (e.g. * for active, - for last).
 func ListWindows(session string) ([]string, error) {
-	out, err := exec.Command("tmux", "list-windows", "-t", session,
+	out, err := exec.Command("tmux", "list-windows", "-t", exact(session),
 		"-F", "#{window_index}:#{window_name}#{window_flags}").Output()
 	if err != nil {
 		return nil, err
@@ -202,7 +209,7 @@ func InTmux() bool {
 // AttachSession attaches the terminal to the named tmux session.
 // Stdin/stdout/stderr are connected so tmux takes over the terminal.
 func AttachSession(name string) error {
-	cmd := exec.Command("tmux", "attach-session", "-t", name)
+	cmd := exec.Command("tmux", "attach-session", "-t", exact(name))
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -312,7 +319,7 @@ func terminalSize() (cols, rows int) {
 
 // KillSession kills a single tmux session by name.
 func KillSession(name string) error {
-	return exec.Command("tmux", "kill-session", "-t", name).Run()
+	return exec.Command("tmux", "kill-session", "-t", exact(name)).Run()
 }
 
 // ClientTTY returns the TTY of the current tmux client (e.g. "/dev/ttys001").
