@@ -214,7 +214,7 @@ is a git worktree of a recipe's repo with its own session `<recipe>@<name>`:
 - `<name>` is the twin's id and its folder `<repo>.twins/<name>/`, next to the main checkout; no `/ . : @`, whitespace, or leading `-`
 - name and branch are prompted for when omitted, never inferred: fzf of the repo's twins / of free local + remote branches, where typing a new value works too (alt-enter takes the typed text over a fuzzy match). Inside tmux the whole hatch runs in a popup (`wth-picker`)
 - an existing twin just gets its session (re)built from the recipe and switched to
-- a new twin: `git fetch`, then `git worktree add` on the branch (an existing local or remote one, or a new one from origin's default branch with no upstream), then bootstrap: copy the `[worktree]` files, `direnv allow` if an `.envrc` landed (and load it once, so the panes don't all build the environment at the same moment), run `setup`
+- a new twin: `git fetch`, then `git worktree add` on the branch (an existing local or remote one, or a new one from origin's default branch with no upstream), then bootstrap: copy the `[worktree]` files, `direnv allow` every `.envrc` in it, nested ones included (and load the root one once, so the panes don't all build the environment at the same moment), run `setup`
 - the session is the recipe with its start-directory moved into the worktree (keeping any offset below the repo root) and `skip-in-wt` commands dropped
 
 **`twin wtf [<recipe>@]<name>`** — worktree fold:

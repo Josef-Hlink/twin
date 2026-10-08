@@ -276,16 +276,19 @@ func bootstrap(root, path string, copies, setup []string) error {
 		fmt.Printf("copied: %s\n", strings.Join(copied, ", "))
 	}
 
-	// A fresh .envrc is blocked until allowed, at its new path.
+	// Every .envrc is blocked until allowed at its new path, including
+	// nested ones (apps/backend/.envrc in a monorepo).
 	direnv := false
-	if _, err := os.Stat(filepath.Join(path, ".envrc")); err == nil {
-		if _, err := exec.LookPath("direnv"); err == nil {
-			if err := runLoud("", "direnv", "allow", path); err != nil {
-				return fmt.Errorf("direnv allow: %w", err)
+	if _, err := exec.LookPath("direnv"); err == nil {
+		for _, rc := range envrcs(path) {
+			if err := runLoud("", "direnv", "allow", rc); err != nil {
+				return fmt.Errorf("direnv allow %s: %w", rc, err)
 			}
-			// Load the environment once now. Otherwise every pane builds it
-			// at the same moment, and parallel nix-direnv evaluations trip
-			// over each other's eval cache.
+		}
+		if _, err := os.Stat(filepath.Join(path, ".envrc")); err == nil {
+			// Load the root environment once now. Otherwise every pane
+			// builds it at the same moment, and parallel nix-direnv
+			// evaluations trip over each other's eval cache.
 			if err := runLoud(path, "direnv", "exec", path, "true"); err != nil {
 				return fmt.Errorf("loading .envrc: %w", err)
 			}
@@ -306,6 +309,25 @@ func bootstrap(root, path string, copies, setup []string) error {
 		}
 	}
 	return nil
+}
+
+// envrcs finds every .envrc in a fresh worktree. It runs before setup, so
+// there's no node_modules to wade through yet; skipping it anyway keeps a
+// copied one from slowing this down.
+func envrcs(root string) []string {
+	var found []string
+	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return nil // unreadable: nothing to allow there
+		case d.IsDir() && d.Name() == "node_modules":
+			return filepath.SkipDir
+		case d.Name() == ".envrc" && !d.IsDir():
+			found = append(found, p)
+		}
+		return nil
+	})
+	return found
 }
 
 // copyPath copies a file, symlink or whole directory from src to dst,

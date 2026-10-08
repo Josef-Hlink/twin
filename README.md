@@ -167,8 +167,9 @@ setup = ["npm install"]
 
 - `copy` entries are paths from the repo root, copied over from the main checkout.
   Missing ones are skipped silently, ones git already tracks are left alone
-- if an `.envrc` was copied, twin runs `direnv allow` on it and loads it once; `setup` commands run
-  inside that environment
+- twin runs `direnv allow` on every `.envrc` in the new twin, nested ones included (a
+  gitignored one still needs its `copy` entry), and loads the root one once; `setup`
+  commands run inside that environment
 - `setup` runs once, in the new worktree, before its session is built. If a command
   fails (or you Ctrl-C it), the whole hatch is rolled back
 - `skip-in-wt = true` on a window or pane drops its command(s) in twins — for dev
