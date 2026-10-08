@@ -180,6 +180,13 @@ const (
 func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, command string) error {
 	clientW, clientH, _ := ClientSize()
 
+	// tmux refuses a popup bigger than the client ("height too large"), so
+	// shrink it to fit; fzf scrolls through whatever no longer fits. One row
+	// stays free so the top-left popup leaves row 0 visible.
+	if clientW > 0 && clientH > 1 {
+		width, height = min(width, clientW), min(height, clientH-1)
+	}
+
 	var x, y int
 	switch anchor {
 	case PopupTopLeft:
@@ -190,7 +197,7 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		y = (clientH + height) / 2
 	}
 
-	return exec.Command("tmux", "display-popup",
+	out, err := exec.Command("tmux", "display-popup",
 		"-T", title,
 		"-x", strconv.Itoa(x),
 		"-y", strconv.Itoa(y),
@@ -198,7 +205,11 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		"-h", strconv.Itoa(height),
 		"-S", style,
 		"-E", command,
-	).Run()
+	).CombinedOutput()
+	if msg := strings.TrimSpace(string(out)); err != nil && msg != "" {
+		return fmt.Errorf("display-popup: %s", msg)
+	}
+	return err
 }
 
 // InTmux returns true if the current process is running inside tmux.
