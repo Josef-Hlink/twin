@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,29 @@ import (
 // resolve to "twin@blue" whenever no "twin" session exists.
 func exact(name string) string {
 	return "=" + name
+}
+
+// popupClientEnv names the client a twin popup belongs to. A popup has no pane
+// of its own, so inside it tmux can't tell which client is "current" and
+// guesses the most recently active one; with two terminals attached that can
+// be the wrong one. DisplayPopup sets it, and the client-scoped commands below
+// then name their client explicitly.
+const popupClientEnv = "TWIN_CLIENT"
+
+// clientCmd builds a tmux command that acts on the current client. Inside a
+// twin popup it passes the popup's client with flag ("-c" for most commands,
+// "-t" for detach-client); elsewhere tmux resolves the client itself.
+func clientCmd(sub, flag string, args ...string) *exec.Cmd {
+	return exec.Command("tmux", slices.Concat([]string{sub}, popupClient(flag), args)...)
+}
+
+// popupClient returns flag and the popup's client inside a twin popup, and
+// nothing elsewhere.
+func popupClient(flag string) []string {
+	if c := os.Getenv(popupClientEnv); c != "" {
+		return []string{flag, c}
+	}
+	return nil
 }
 
 // HasSession returns true if a tmux session with the given name exists.
@@ -141,7 +165,7 @@ func ListSessions() ([]string, error) {
 
 // CurrentSession returns the name of the currently attached tmux session.
 func CurrentSession() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{session_name}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -150,7 +174,7 @@ func CurrentSession() (string, error) {
 
 // SwitchClient switches the current tmux client to the named session.
 func SwitchClient(name string) error {
-	return exec.Command("tmux", "switch-client", "-t", exact(name)).Run()
+	return clientCmd("switch-client", "-c", "-t", exact(name)).Run()
 }
 
 // ListWindows returns the windows in a session, formatted as "index:name"
@@ -176,9 +200,14 @@ const (
 	PopupCenter                     // centered on screen
 )
 
-// DisplayPopup opens a tmux popup at the given anchor position.
+// DisplayPopup opens a tmux popup at the given anchor position, on the
+// current client, and pins the popup's own tmux calls to that client.
 func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, command string) error {
 	clientW, clientH, _ := ClientSize()
+	var pin []string
+	if tty, err := ClientTTY(); err == nil && tty != "" {
+		pin = []string{"-c", tty, "-e", popupClientEnv + "=" + tty}
+	}
 
 	// tmux refuses a popup bigger than the client ("height too large"), so
 	// shrink it to fit; fzf scrolls through whatever no longer fits. One row
@@ -197,7 +226,7 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		y = (clientH + height) / 2
 	}
 
-	out, err := exec.Command("tmux", "display-popup",
+	out, err := exec.Command("tmux", slices.Concat([]string{"display-popup"}, pin, []string{
 		"-T", title,
 		"-x", strconv.Itoa(x),
 		"-y", strconv.Itoa(y),
@@ -205,7 +234,7 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		"-h", strconv.Itoa(height),
 		"-S", style,
 		"-E", command,
-	).CombinedOutput()
+	})...).CombinedOutput()
 	if msg := strings.TrimSpace(string(out)); err != nil && msg != "" {
 		return fmt.Errorf("display-popup: %s", msg)
 	}
@@ -283,7 +312,7 @@ func CapturePane(target string) (string, error) {
 
 // ClientSize returns the width and height of the current tmux client.
 func ClientSize() (width, height int, err error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_width}\t#{client_height}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_width}\t#{client_height}").Output()
 	if err != nil {
 		return 0, 0, err
 	}
@@ -331,7 +360,7 @@ func terminalSize() (cols, rows int) {
 // DisplayMessage shows msg on the current client's status line for a few
 // seconds.
 func DisplayMessage(msg string) error {
-	return exec.Command("tmux", "display-message", "-d", "3000", escapeFormat(msg)).Run()
+	return clientCmd("display-message", "-c", "-d", "3000", escapeFormat(msg)).Run()
 }
 
 // SwitchAndKill moves the current client to session `to`, shows msg there,
@@ -339,11 +368,11 @@ func DisplayMessage(msg string) error {
 // with ";"), so the server finishes it even when the caller runs inside the
 // session being killed and dies with it.
 func SwitchAndKill(to, kill, msg string) error {
-	return exec.Command("tmux",
-		"switch-client", "-t", exact(to), ";",
-		"display-message", "-d", "3000", escapeFormat(msg), ";",
-		"kill-session", "-t", exact(kill),
-	).Run()
+	return exec.Command("tmux", slices.Concat(
+		[]string{"switch-client"}, popupClient("-c"), []string{"-t", exact(to), ";"},
+		[]string{"display-message"}, popupClient("-c"), []string{"-d", "3000", escapeFormat(msg), ";"},
+		[]string{"kill-session", "-t", exact(kill)},
+	)...).Run()
 }
 
 // escapeFormat keeps tmux from reading a # in msg as the start of a format.
@@ -358,7 +387,7 @@ func KillSession(name string) error {
 
 // ClientTTY returns the TTY of the current tmux client (e.g. "/dev/ttys001").
 func ClientTTY() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_tty}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_tty}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -368,7 +397,7 @@ func ClientTTY() (string, error) {
 // ClientPID returns the PID of the process that launched the tmux client
 // (typically the parent shell).
 func ClientPID() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_pid}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_pid}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -378,7 +407,7 @@ func ClientPID() (string, error) {
 // DetachClient detaches the current tmux client, returning control to the
 // parent terminal.
 func DetachClient() error {
-	return exec.Command("tmux", "detach-client").Run()
+	return clientCmd("detach-client", "-t").Run()
 }
 
 // KillServer kills the tmux server, terminating all sessions.
