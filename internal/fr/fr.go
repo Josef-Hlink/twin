@@ -10,13 +10,15 @@ import (
 	"github.com/Josef-Hlink/twin/internal/popup"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
+	"github.com/Josef-Hlink/twin/internal/twins"
 )
 
 const Usage = `usage: twin fr [name | --list] [--no-attach]
 
 open a single tmux session from a recipe.
-  (no args)     fzf picker of recipes without an open session
-  <name>        open the named recipe (or attach if it already exists)
+  (no args)     fzf picker of recipes without an open session, plus
+                twins (<recipe>@<name>) whose session isn't running
+  <name>        open the named recipe or twin (or attach if it already exists)
   --list        print all available recipe names
   --no-attach   don't auto-attach after creating the session
 `
@@ -86,6 +88,10 @@ func open(name string, noAttach bool) error {
 		return err
 	}
 
+	if _, _, ok := twins.SplitSession(name); ok {
+		return twins.Reopen(cfg, name, noAttach)
+	}
+
 	recipe, err := config.LoadRecipe(cfg.RecipeDir, name)
 	if err != nil {
 		return err
@@ -103,6 +109,23 @@ func open(name string, noAttach bool) error {
 	return goToSession(name)
 }
 
+// openable returns what the picker offers: recipes without an open session,
+// then twins whose session isn't running.
+func openable(cfg config.Config) ([]string, error) {
+	names, err := config.ListRecipes(cfg.RecipeDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var avail []string
+	for _, name := range names {
+		if !tmux.HasSession(name) {
+			avail = append(avail, name)
+		}
+	}
+	return append(avail, twins.Dormant(cfg, names)...), nil
+}
+
 // pick shows a picker of recipes that don't have open sessions.
 // Inside tmux it uses a popup; outside tmux it falls back to inline fzf.
 func pick() error {
@@ -111,16 +134,9 @@ func pick() error {
 		return err
 	}
 
-	names, err := config.ListRecipes(cfg.RecipeDir)
+	available, err := openable(cfg)
 	if err != nil {
 		return err
-	}
-
-	var available []string
-	for _, name := range names {
-		if !tmux.HasSession(name) {
-			available = append(available, name)
-		}
 	}
 
 	if len(available) == 0 {
@@ -169,16 +185,9 @@ func RunPicker() error {
 		return err
 	}
 
-	names, err := config.ListRecipes(cfg.RecipeDir)
+	available, err := openable(cfg)
 	if err != nil {
 		return err
-	}
-
-	var available []string
-	for _, name := range names {
-		if !tmux.HasSession(name) {
-			available = append(available, name)
-		}
 	}
 
 	if len(available) == 0 {
@@ -192,6 +201,10 @@ func RunPicker() error {
 	}
 	if selected == "" {
 		return nil
+	}
+
+	if _, _, ok := twins.SplitSession(selected); ok {
+		return twins.Reopen(cfg, selected, false)
 	}
 
 	recipe, err := config.LoadRecipe(cfg.RecipeDir, selected)

@@ -194,3 +194,48 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+func TestForTwin(t *testing.T) {
+	orig := Recipe{
+		StartDirectory: "/repo",
+		Windows: []Window{
+			{Command: "nvim"},
+			{Command: "pnpm dev", SkipInWt: true},
+			{Panes: []Pane{
+				{Command: "claude"},
+				{Commands: []string{"cd apps/backend", "node ace"}, SkipInWt: true},
+			}},
+			{SkipInWt: true, Panes: []Pane{{Command: "worker"}, {Command: "logs"}}},
+		},
+	}
+
+	twin := orig.ForTwin("/repo.twins/blue")
+
+	if twin.StartDirectory != "/repo.twins/blue" {
+		t.Fatalf("StartDirectory = %q, want the twin dir", twin.StartDirectory)
+	}
+	got := [][]string{
+		twin.Windows[0].Cmds(),          // kept
+		twin.Windows[1].Cmds(),          // skipped window
+		twin.Windows[2].Panes[0].Cmds(), // kept pane
+		twin.Windows[2].Panes[1].Cmds(), // skipped pane
+		twin.Windows[3].Panes[0].Cmds(), // skipped via its window
+		twin.Windows[3].Panes[1].Cmds(),
+	}
+	if !equalStrings(got[0], []string{"nvim"}) || !equalStrings(got[2], []string{"claude"}) {
+		t.Fatalf("unmarked commands changed: %#v", got)
+	}
+	for _, i := range []int{1, 3, 4, 5} {
+		if len(got[i]) != 0 {
+			t.Fatalf("skip-in-wt command %d still set: %#v", i, got[i])
+		}
+	}
+
+	// The original recipe must be untouched: ForTwin works on a copy.
+	if orig.StartDirectory != "/repo" ||
+		!equalStrings(orig.Windows[1].Cmds(), []string{"pnpm dev"}) ||
+		!equalStrings(orig.Windows[2].Panes[1].Cmds(), []string{"cd apps/backend", "node ace"}) ||
+		!equalStrings(orig.Windows[3].Panes[0].Cmds(), []string{"worker"}) {
+		t.Fatalf("ForTwin modified the original recipe: %#v", orig)
+	}
+}

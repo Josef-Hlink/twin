@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -22,6 +23,17 @@ type Config struct {
 	SybauBorderColor string   `toml:"sybau-border-color"`
 	PbqtBorderColor  string   `toml:"pbqt-border-color"`
 	IclBorderColor   string   `toml:"icl-border-color"`
+	WthBorderColor   string   `toml:"wth-border-color"`
+	WtfBorderColor   string   `toml:"wtf-border-color"`
+	Worktree         Worktree `toml:"worktree"` // shared by every recipe's twins
+}
+
+// Worktree is the [worktree] block (in twin.toml and in recipes) that
+// bootstraps a fresh twin: untracked files to bring over from the main
+// checkout, then commands to run once in the new worktree.
+type Worktree struct {
+	Copy  []string `toml:"copy"`  // paths from the repo root; missing ones are skipped
+	Setup []string `toml:"setup"` // run in order in the worktree root
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays
@@ -56,6 +68,10 @@ func (c Config) BorderColor(cmd string) Color {
 		raw, def = c.PbqtBorderColor, "red"
 	case "icl":
 		raw, def = c.IclBorderColor, "colour214"
+	case "wth":
+		raw, def = c.WthBorderColor, "blue"
+	case "wtf":
+		raw, def = c.WtfBorderColor, "yellow"
 	default:
 		return Color("magenta")
 	}
@@ -75,6 +91,7 @@ type Pane struct {
 	Split          string   `toml:"split"`      // "right" | "down"; defaults to "right"
 	Size           string   `toml:"size"`       // e.g. "30%"; optional (even split when empty)
 	Focus          bool     `toml:"focus"`      // focus this pane on open; default is pane 1
+	SkipInWt       bool     `toml:"skip-in-wt"` // in twins, open as a plain shell
 }
 
 // Window represents a single window in a recipe.
@@ -84,6 +101,7 @@ type Window struct {
 	Command        string   `toml:"command"`  // single command; mutually exclusive with commands
 	Commands       []string `toml:"commands"` // command list; mutually exclusive with command
 	Panes          []Pane   `toml:"panes"`
+	SkipInWt       bool     `toml:"skip-in-wt"` // in twins, every pane opens as a plain shell
 }
 
 // chooseCommands returns the effective command list, preferring the singular
@@ -105,6 +123,31 @@ func (p Pane) Cmds() []string { return chooseCommands(p.Command, p.Commands) }
 type Recipe struct {
 	StartDirectory string   `toml:"start-directory"`
 	Windows        []Window `toml:"windows"`
+	Worktree       Worktree `toml:"worktree"`
+}
+
+// ForTwin returns a copy of the recipe rooted at dir, for a twin (worktree)
+// session. Windows and panes marked skip-in-wt lose their commands, so they
+// open as plain shells instead of starting a second dev server or worker.
+func (r Recipe) ForTwin(dir string) Recipe {
+	t := r
+	t.StartDirectory = dir
+	t.Windows = make([]Window, len(r.Windows))
+	for i, w := range r.Windows {
+		// w is a copy of the window, but w.Panes still shares its backing
+		// array with the original recipe, so clone it before editing.
+		w.Panes = slices.Clone(w.Panes)
+		if w.SkipInWt {
+			w.Command, w.Commands = "", nil
+		}
+		for j := range w.Panes {
+			if w.SkipInWt || w.Panes[j].SkipInWt {
+				w.Panes[j].Command, w.Panes[j].Commands = "", nil
+			}
+		}
+		t.Windows[i] = w
+	}
+	return t
 }
 
 // sizeRe matches a pane size like "30%".
@@ -201,6 +244,7 @@ const templateContent = `start-directory = "~/"
 # name = "editor"                           # optional fixed window name
 # command = "nvim"                          # a single command
 # commands = ["npm install", "make run"]    # or a list, one shell line each
+# skip-in-wt = true                         # twins (twin wth) open it as a plain shell
 
 # split a window into panes instead of using window-level command(s):
 # [[windows]]
@@ -211,6 +255,11 @@ const templateContent = `start-directory = "~/"
 #   split = "right"   # or "down"; defaults to right
 #   size  = "30%"     # optional, relative to the split pane
 #   command = "lazygit"
+
+# bootstrap a fresh twin (twin wth); appended to twin.toml's [worktree]:
+# [worktree]
+# copy  = [".env"]          # untracked files to copy over from the main checkout
+# setup = ["npm install"]   # run once in the new worktree
 `
 
 // ensureRecipeDir guarantees recipeDir exists and contains a template.toml,
