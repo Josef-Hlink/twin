@@ -138,7 +138,7 @@ func Open(cfg config.Config, recipeName string, recipe config.Recipe, name strin
 	session := SessionName(recipeName, name)
 	if !tmux.HasSession(session) {
 		v := Vars(recipeName, recipe, name, "")
-		opts := tspmo.Options{Tint: cfg.Ringers.Color(name)}
+		opts := tspmo.Options{Tint: cfg.Ringers.Color(name), Ringer: name}
 		if cfg.Ringers.Enter != "" {
 			opts.Shell = cfg.Ringers.Command(cfg.Ringers.Enter, v)
 		}

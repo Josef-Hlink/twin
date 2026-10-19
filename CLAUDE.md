@@ -201,7 +201,7 @@ popup shell doesn't inherit PATH context.
 - a ringer exists when its `dir` does; an existing one just gets its session (re)built from the recipe and switched to
 - a new one runs `create` (in `{repo}`, terminal attached, Ctrl-C stops the command not twin), then must have left `dir` behind
 - name and branch are picked when omitted: fzf of existing + free names (typing a new one when no `names` are set), and of `{repo}`'s branches only when `create` uses `{branch}`. Inside tmux the whole thing runs in a popup (`ring-picker`) so create's output shows
-- the session is the recipe rooted at `dir`, `skip-in-ringers` commands dropped, `enter` as its `default-command` (new-session gets it as the first pane's command, set-option for everything after, so manual splits land in the ringer too), tinted from `[ringers.colors]` (status-style, status-left-style and the active pane border get fg=<color> appended)
+- the session is the recipe rooted at `dir`, `skip-in-ringers` commands dropped, `enter` as its `default-command` (new-session gets it as the first pane's command, set-option for everything after, so manual splits land in the ringer too), tinted from `[ringers.colors]` (status-style, status-left-style and both pane border styles get fg=<color> appended, pane-border-lines heavy; per window plus an after-new-window session hook), and the session user options `@ringer` / `@ringer-color` set for tmux.conf formats
 
 **`twin unring [<recipe>@]<name>`** — drop a ringer:
 - runs `remove` first; a non-zero exit aborts and keeps everything (remove owns any safety checks)

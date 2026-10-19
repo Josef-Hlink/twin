@@ -176,6 +176,15 @@ red = "red"
   including ones you split by hand later — starts inside the ringer
 - `skip-in-ringers = true` on a recipe window or pane opens it as a plain shell in
   ringers, for setups where copies can't run the dev servers side by side
+- `[ringers.colors]` tints the session: the status line's foreground, every pane
+  border, and heavy border lines, in every window including ones opened later
+- a ringer's session carries the user options `@ringer` (its name) and `@ringer-color`
+  (its colour, when it has one), so your tmux.conf can style anything with them. A
+  filled session name, with the prefix mark outside it:
+
+  ```tmux
+  set -g status-left '#{?@ringer-color,#[bg=#{@ringer-color}]#[fg=black] #S #[default],#S} #{?client_prefix,>_,}'
+  ```
 
 The simplest setup is plain git worktrees. They share your ports and databases, so
 servers get `skip-in-ringers`:

@@ -130,6 +130,9 @@ type Options struct {
 	Shell string
 	// Tint, when set, colors the session's status line and pane borders.
 	Tint config.Color
+	// Ringer, when set, is the ringer this session belongs to. It's exposed
+	// to tmux formats as @ringer (and its tint as @ringer-color).
+	Ringer string
 }
 
 // MainOptions are the options for a recipe's own session: [ringers] main, if
@@ -185,6 +188,16 @@ func CreateSession(name string, recipe config.Recipe, opts Options) error {
 	if opts.Tint != "" {
 		if err := tmux.TintSession(name, opts.Tint.Tmux()); err != nil {
 			return fmt.Errorf("tint: %w", err)
+		}
+	}
+	if opts.Ringer != "" {
+		if err := tmux.SetUserOption(name, "@ringer", opts.Ringer); err != nil {
+			return fmt.Errorf("@ringer: %w", err)
+		}
+		if opts.Tint != "" {
+			if err := tmux.SetUserOption(name, "@ringer-color", opts.Tint.Tmux()); err != nil {
+				return fmt.Errorf("@ringer-color: %w", err)
+			}
 		}
 	}
 
