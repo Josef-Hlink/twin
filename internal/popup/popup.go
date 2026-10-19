@@ -1,6 +1,7 @@
 package popup
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,6 +70,30 @@ func FzfSelect(items []string, previewCols int, previewCmd string, accent config
 		)
 	}
 
+	return runFzf(items, fzfArgs)
+}
+
+// FzfPickOrType is FzfSelect for pickers that also accept new values: enter
+// picks the highlighted item, or takes the typed text when nothing matches,
+// and alt-enter always takes the typed text (fzf matches fuzzily, so a new
+// name usually still highlights some existing item). Returns "" when
+// cancelled.
+func FzfPickOrType(items []string, prompt string, accent config.Color) (string, error) {
+	fzfArgs := []string{
+		"--prompt", prompt,
+		"--header", "enter: pick · alt-enter: use typed text",
+		"--bind", "enter:accept-or-print-query,alt-enter:print-query",
+	}
+	if accent != "" {
+		c := accent.Fzf()
+		fzfArgs = append(fzfArgs, "--color", fmt.Sprintf("pointer:%s,marker:%s", c, c))
+	}
+	return runFzf(items, fzfArgs)
+}
+
+// runFzf pipes items to fzf and returns what it printed, or "" when the user
+// cancelled.
+func runFzf(items []string, fzfArgs []string) (string, error) {
 	cmd := exec.Command("fzf", fzfArgs...)
 	cmd.Stdin = strings.NewReader(strings.Join(items, "\n"))
 	cmd.Stderr = os.Stderr
@@ -85,4 +110,22 @@ func FzfSelect(items []string, previewCols int, previewCmd string, accent config
 	}
 
 	return strings.TrimSpace(string(out)), nil
+}
+
+// Quote wraps s in single quotes for the shell that runs a popup's command,
+// so arguments with spaces or special characters arrive intact.
+func Quote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// Hold shows err inside a popup and waits for enter before letting it close,
+// since a popup disappears (taking its output with it) as soon as its command
+// exits. Returns nil once the error has been shown.
+func Hold(cmd string, err error) error {
+	if err == nil {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "\ntwin %s: %v\n\npress enter to close", cmd, err)
+	bufio.NewReader(os.Stdin).ReadString('\n')
+	return nil
 }
