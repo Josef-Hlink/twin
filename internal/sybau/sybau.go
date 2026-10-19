@@ -2,6 +2,7 @@ package sybau
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -34,8 +35,9 @@ func Run(args []string) error {
 	current, _ := tmux.CurrentSession()
 	numbered := cfg.IsOrderedSessions()
 
-	// Calculate popup dimensions from actual content, skipping the current session.
-	lines := buildLines(sessions, current, numbered)
+	// Calculate popup dimensions from actual content, skipping the current
+	// session. Plain lines: color codes would count toward the width.
+	lines := buildLines(sessions, current, numbered, noColor)
 	count := len(lines)
 	maxListLine := len("sybau") // minimum width
 	for _, line := range lines {
@@ -79,7 +81,7 @@ func RunPicker(args []string) error {
 	current, _ := tmux.CurrentSession()
 	numbered := cfg.IsOrderedSessions()
 
-	lines := buildLines(sessions, current, numbered)
+	lines := buildLines(sessions, current, numbered, cfg.Ringers.Color)
 	if len(lines) == 0 {
 		fmt.Println("no other tmux sessions running")
 		return nil
@@ -92,7 +94,7 @@ func RunPicker(args []string) error {
 		// The sed strips the "[N] " prefix when session numbers are shown,
 		// and a ringer's indent. The awk colorizes the active window (*) in
 		// bold cyan using the window_active flag as a prefix to key off of.
-		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //; s/^ *//')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
+		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/` + "\x1b" + `\[[0-9;]*m//g; s/^\[.*\] //; s/^ *//')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	}
 
 	selected, err := popup.FzfSelect(lines, previewCols, previewCmd, cfg.BorderColor("sybau"))
@@ -108,21 +110,26 @@ func RunPicker(args []string) error {
 
 // buildLines creates the picker lines, skipping the current session. Each
 // ringer (recipe@name) is listed right under its recipe's session, indented
-// when that line is shown; the other sessions keep their creation order and,
-// when numbered, get "[N] " from their position among the non-ringer sessions.
-func buildLines(sessions []string, current string, numbered bool) []string {
+// when that line is shown, in its [ringers.colors] color when it has one; the
+// other sessions keep their creation order and, when numbered, get "[N] "
+// from their position among the non-ringer sessions.
+func buildLines(sessions []string, current string, numbered bool, colorOf func(string) config.Color) []string {
 	var lines []string
 	n := 0
 	shown, indent := "", "" // the recipe line ringers can nest under
 	for _, s := range group(sessions) {
-		if recipe, _, isRinger := ringers.SplitSession(s); isRinger {
+		if recipe, name, isRinger := ringers.SplitSession(s); isRinger {
 			if s == current {
 				continue
 			}
+			shownAs := s
+			if sgr := colorOf(name).ANSI(); sgr != "" {
+				shownAs = "\x1b[" + sgr + "m" + s + "\x1b[0m"
+			}
 			if recipe == shown {
-				lines = append(lines, indent+s)
+				lines = append(lines, indent+shownAs)
 			} else {
-				lines = append(lines, s)
+				lines = append(lines, shownAs)
 			}
 			continue
 		}
@@ -165,9 +172,15 @@ func group(sessions []string) []string {
 	return out
 }
 
-// sessionOf turns a picker line back into a session name, dropping the
-// "[N] " prefix or a ringer's indent.
+func noColor(string) config.Color { return "" }
+
+// ansiCodes matches the SGR color codes ringer lines are wrapped in.
+var ansiCodes = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// sessionOf turns a picker line back into a session name, dropping any color
+// codes, the "[N] " prefix or a ringer's indent.
 func sessionOf(line string) string {
+	line = ansiCodes.ReplaceAllString(line, "")
 	if _, after, ok := strings.Cut(line, "] "); ok {
 		line = after
 	}
