@@ -7,6 +7,7 @@ import (
 
 	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/popup"
+	"github.com/Josef-Hlink/twin/internal/ringers"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
@@ -34,20 +35,11 @@ func Run(args []string) error {
 	numbered := cfg.IsOrderedSessions()
 
 	// Calculate popup dimensions from actual content, skipping the current session.
-	count := 0
+	lines := buildLines(sessions, current, numbered)
+	count := len(lines)
 	maxListLine := len("sybau") // minimum width
-	for i, s := range sessions {
-		if s == current {
-			continue
-		}
-		count++
-		line := s
-		if numbered {
-			line = fmt.Sprintf("[%d] %s", i, s)
-		}
-		if len(line) > maxListLine {
-			maxListLine = len(line)
-		}
+	for _, line := range lines {
+		maxListLine = max(maxListLine, len(line))
 	}
 
 	if count == 0 {
@@ -87,19 +79,7 @@ func RunPicker(args []string) error {
 	current, _ := tmux.CurrentSession()
 	numbered := cfg.IsOrderedSessions()
 
-	// Build display lines with original indices, skipping the current session.
-	var lines []string
-	for i, s := range sessions {
-		if s == current {
-			continue
-		}
-		if numbered {
-			lines = append(lines, fmt.Sprintf("[%d] %s", i, s))
-		} else {
-			lines = append(lines, s)
-		}
-	}
-
+	lines := buildLines(sessions, current, numbered)
 	if len(lines) == 0 {
 		fmt.Println("no other tmux sessions running")
 		return nil
@@ -110,9 +90,9 @@ func RunPicker(args []string) error {
 	if preview {
 		previewCols, _ = windowMetrics(sessions, current)
 		// The sed strips the "[N] " prefix when session numbers are shown,
-		// and is a no-op otherwise. The awk colorizes the active window (*) in
+		// and a ringer's indent. The awk colorizes the active window (*) in
 		// bold cyan using the window_active flag as a prefix to key off of.
-		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
+		previewCmd = `tmux list-windows -t "$(echo {} | sed 's/^\[.*\] //; s/^ *//')" -F '#{window_active} #{window_index}:#{window_name}#{window_flags}' | awk '{if($1=="1"){printf "\033[1;36m%s\033[0m\n",substr($0,3)}else{print substr($0,3)}}'`
 	}
 
 	selected, err := popup.FzfSelect(lines, previewCols, previewCmd, cfg.BorderColor("sybau"))
@@ -123,14 +103,75 @@ func RunPicker(args []string) error {
 		return nil // user cancelled
 	}
 
-	// Strip the "[N] " prefix if present.
-	if numbered {
-		if _, after, ok := strings.Cut(selected, "] "); ok {
-			selected = after
+	return tmux.SwitchClient(sessionOf(selected))
+}
+
+// buildLines creates the picker lines, skipping the current session. Each
+// ringer (recipe@name) is listed right under its recipe's session, indented
+// when that line is shown; the other sessions keep their creation order and,
+// when numbered, get "[N] " from their position among the non-ringer sessions.
+func buildLines(sessions []string, current string, numbered bool) []string {
+	var lines []string
+	n := 0
+	shown, indent := "", "" // the recipe line ringers can nest under
+	for _, s := range group(sessions) {
+		if recipe, _, isRinger := ringers.SplitSession(s); isRinger {
+			if s == current {
+				continue
+			}
+			if recipe == shown {
+				lines = append(lines, indent+s)
+			} else {
+				lines = append(lines, s)
+			}
+			continue
 		}
+
+		prefix := ""
+		if numbered {
+			prefix = fmt.Sprintf("[%d] ", n)
+		}
+		n++
+		if s == current {
+			shown = ""
+			continue
+		}
+		lines = append(lines, prefix+s)
+		shown, indent = s, strings.Repeat(" ", max(len(prefix), 2))
+	}
+	return lines
+}
+
+// group orders sessions so that each ringer follows its recipe's session. A
+// ringer whose recipe session isn't running keeps its own place.
+func group(sessions []string) []string {
+	running := make(map[string]bool, len(sessions))
+	for _, s := range sessions {
+		running[s] = true
 	}
 
-	return tmux.SwitchClient(selected)
+	var out []string
+	for _, s := range sessions {
+		if recipe, _, ok := ringers.SplitSession(s); ok && running[recipe] {
+			continue // listed under its recipe instead
+		}
+		out = append(out, s)
+		for _, t := range sessions {
+			if recipe, _, ok := ringers.SplitSession(t); ok && recipe == s {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// sessionOf turns a picker line back into a session name, dropping the
+// "[N] " prefix or a ringer's indent.
+func sessionOf(line string) string {
+	if _, after, ok := strings.Cut(line, "] "); ok {
+		line = after
+	}
+	return strings.TrimSpace(line)
 }
 
 // windowMetrics returns the longest window line and max window count across

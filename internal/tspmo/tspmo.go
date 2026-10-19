@@ -59,7 +59,7 @@ func Run() error {
 			time.Sleep(1 * time.Second)
 		}
 
-		if err := CreateSession(name, recipe); err != nil {
+		if err := CreateSession(name, recipe, MainOptions(cfg, name, recipe)); err != nil {
 			p.fail(name, err)
 			continue
 		}
@@ -123,9 +123,24 @@ func attachTarget(cfg config.Config) (string, error) {
 	return "", nil
 }
 
+// Options are the per-session extras on top of a recipe.
+type Options struct {
+	// Shell, when set, is what every pane in the session starts through
+	// (tmux's default-command), e.g. a command that enters a ringer.
+	Shell string
+	// Tint, when set, colors the session's status line and pane borders.
+	Tint config.Color
+}
+
+// MainOptions are the options for a recipe's own session: [ringers] main, if
+// configured, is its shell.
+func MainOptions(cfg config.Config, name string, recipe config.Recipe) Options {
+	return Options{Shell: cfg.Ringers.MainCommand(name, recipe.StartDirectory)}
+}
+
 // CreateSession builds a tmux session from a recipe: creates windows, splits
 // panes, and sends commands.
-func CreateSession(name string, recipe config.Recipe) error {
+func CreateSession(name string, recipe config.Recipe, opts Options) error {
 	baseDir := recipe.StartDirectory
 
 	for i, w := range recipe.Windows {
@@ -145,8 +160,15 @@ func CreateSession(name string, recipe config.Recipe) error {
 		var basePaneID string
 		var err error
 		if i == 0 {
-			if basePaneID, err = tmux.NewSession(name, basePaneDir, w.Name); err != nil {
+			if basePaneID, err = tmux.NewSession(name, basePaneDir, w.Name, opts.Shell); err != nil {
 				return fmt.Errorf("new-session: %w", err)
+			}
+			// The first pane got the shell from new-session itself; every
+			// window and split after it, ours or the user's, gets it here.
+			if opts.Shell != "" {
+				if err := tmux.SetDefaultCommand(name, opts.Shell); err != nil {
+					return fmt.Errorf("default-command: %w", err)
+				}
 			}
 		} else {
 			target := fmt.Sprintf("%s:%d", name, i+1)
@@ -157,6 +179,12 @@ func CreateSession(name string, recipe config.Recipe) error {
 
 		if err := buildWindow(basePaneID, w, windowDir); err != nil {
 			return fmt.Errorf("window %d: %w", i+1, err)
+		}
+	}
+
+	if opts.Tint != "" {
+		if err := tmux.TintSession(name, opts.Tint.Tmux()); err != nil {
+			return fmt.Errorf("tint: %w", err)
 		}
 	}
 

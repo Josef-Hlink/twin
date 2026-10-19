@@ -52,20 +52,22 @@ active = ["front", "back", "infra"]
 
 ### Popup colors
 
-Each subcommand that uses a popup picker (`fr`, `sybau`, `pbqt`, `icl`) has a configurable accent color that paints both the tmux popup border and fzf's pointer/marker, so the picker reads as one themed surface.
+Each subcommand that uses a popup picker (`fr`, `sybau`, `pbqt`, `icl`, `ring`, `unring`) has a configurable accent color that paints both the tmux popup border and fzf's pointer/marker, so the picker reads as one themed surface.
 
 ```toml
 fr-border-color    = "green"      # default: green
 sybau-border-color = "magenta"    # default: magenta
 pbqt-border-color  = "red"        # default: red
 icl-border-color   = "colour214"  # default: colour214 (orange)
+ring-border-color   = "blue"      # default: blue
+unring-border-color = "yellow"    # default: yellow
 ```
 
 Values accept any form both tools take: a named color (`red`, `magenta`, `cyan`, …), a 256-color index (`214` or `colour214`), or hex (`#ff8800`).
 
 ### Popup size
 
-By default the list pickers (`fr`, `sybau`, `pbqt`) grow their popup to fit every option, which gets tall and thin with a long list. `max-options` caps how many rows the popup is sized for; fzf scrolls through the rest and shows its `matched/total` count so you can tell more options exist.
+By default the list pickers (`fr`, `sybau`, `pbqt`, `ring`, `unring`) grow their popup to fit every option, which gets tall and thin with a long list. `max-options` caps how many rows the popup is sized for; fzf scrolls through the rest and shows its `matched/total` count so you can tell more options exist.
 
 ```toml
 max-options = 10   # omit (or 0) to grow the popup to fit every option
@@ -140,6 +142,52 @@ A window can be split into multiple panes instead of holding a single shell:
   pane title later — twin sets it once at creation
 - a window uses **either** `command`/`commands` or `panes`, never both
 
+## Ringers
+
+A ringer is a named copy of a recipe's session, `<recipe>@<name>`, so you can work on
+two or three things side by side — each with its own editor, shells and Claude. twin
+owns the session: naming it, building it from the recipe in the ringer's directory,
+picking it, listing it in `sybau` and `fr`, tinting it. What makes the copy itself real
+— a clone, a container, a remote box — is up to the commands you configure in
+`twin.toml`:
+
+```toml
+[ringers]
+names  = ["red", "green", "blue"]      # what `ring` offers; omit to allow any name
+dir    = "~/copies/{name}/{recipe}"     # where a ringer's session starts
+create = "mkcopy {name} {recipe} {branch}"
+remove = "rmcopy {name} {recipe}"
+enter  = "copy-shell {name}"            # optional: every shell in the ringer starts through this
+main   = "copy-shell default {recipe}"  # optional: same, for the recipe's own session
+
+[ringers.colors]                         # optional: tint a ringer's session by name
+red = "red"
+```
+
+- placeholders: `{recipe}`, `{name}`, `{branch}`, `{repo}` (the recipe's start-directory)
+  and `{dir}` (the expanded `dir`). In commands, values are shell-quoted when they need
+  it and an empty one (no branch given) disappears. In `main` only `{recipe}` and
+  `{repo}` mean anything
+- `dir` must contain `{name}` once; a ringer exists when its `dir` does
+- `create` must leave `dir` behind; a non-zero exit means no ringer
+- `remove` decides what's safe to delete: a non-zero exit keeps the ringer, so put any
+  "is there unpushed work?" check in there
+- `enter` becomes the session's tmux `default-command`, so every window and pane —
+  including ones you split by hand later — starts inside the ringer
+- `skip-in-ringers = true` on a recipe window or pane opens it as a plain shell in
+  ringers, for setups where copies can't run the dev servers side by side
+
+The simplest setup is plain git worktrees. They share your ports and databases, so
+servers get `skip-in-ringers`:
+
+```toml
+[ringers]
+names  = ["a", "b", "c"]
+dir    = "{repo}.ringers/{name}"
+create = "git -C {repo} worktree add {dir} {branch}"
+remove = "git -C {repo} worktree remove {dir}"
+```
+
 ## Subcommands
 
 ### `twin tspmo`
@@ -160,6 +208,9 @@ twin fr myproject    # open a specific recipe
 twin fr --list       # list all available recipes
 ```
 
+The picker also offers ringers whose session isn't running (after a reboot, say), as
+`<recipe>@<name>`.
+
 ### `twin sybau`
 
 > Switch Your Basis of Active Undertakement
@@ -168,6 +219,36 @@ Fuzzy session switcher in a tmux popup. Bind it in `tmux.conf`:
 
 ```
 bind-key Space run-shell "twin sybau --preview"
+```
+
+Ringers are listed right under their recipe's session.
+
+### `twin ring`
+
+Open a ringer (see [Ringers](#ringers)). Unlike the others, `ring` and `unring` are
+plain words, not slang.
+
+```sh
+twin ring red                    # ringer "red" of the current session's recipe
+twin ring front@red feat/42-x    # name the recipe, and a branch for create
+twin ring                        # pick the name (and the branch, when create uses one)
+```
+
+- a ringer whose `dir` exists just gets its session (re)opened
+- a new one runs `create` first, in the popup, so its output shows
+- name and branch are picked in fzf when omitted; the branches come from `{repo}` when
+  it's a git repo, and typing a new one works too (alt-enter takes the typed text over
+  a fuzzy match). With `names` set, only those names are accepted
+- `--no-attach` skips switching to it
+
+### `twin unring`
+
+Drop a ringer: runs `remove`, then kills its session. If you're in it, you land on the
+recipe's own session.
+
+```sh
+twin unring red        # drop ringer "red" of the current session's recipe
+twin unring            # pick it in fzf
 ```
 
 ## Disclaimer

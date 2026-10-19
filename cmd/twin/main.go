@@ -8,10 +8,12 @@ import (
 	"github.com/Josef-Hlink/twin/internal/frfr"
 	"github.com/Josef-Hlink/twin/internal/icl"
 	"github.com/Josef-Hlink/twin/internal/pbqt"
+	"github.com/Josef-Hlink/twin/internal/ring"
 	"github.com/Josef-Hlink/twin/internal/shkspr"
 	"github.com/Josef-Hlink/twin/internal/sybau"
 	"github.com/Josef-Hlink/twin/internal/tspmo"
 	"github.com/Josef-Hlink/twin/internal/tysm"
+	"github.com/Josef-Hlink/twin/internal/unring"
 )
 
 // version is set at build time via ldflags by GoReleaser.
@@ -26,6 +28,8 @@ var helps = map[string]string{
 	"icl":    icl.Usage,
 	"shkspr": shkspr.Usage,
 	"tysm":   tysm.Usage,
+	"ring":   ring.Usage,
+	"unring": unring.Usage,
 }
 
 func main() {
@@ -79,6 +83,14 @@ func main() {
 		err = tysm.Run(args)
 	case "shkspr":
 		err = shkspr.Run(args)
+	case "ring":
+		err = ring.Run(args)
+	case "ring-picker":
+		err = ring.RunPicker(args)
+	case "unring":
+		err = unring.Run(args)
+	case "unring-picker":
+		err = unring.RunPicker(args)
 	default:
 		printUsage(os.Stderr)
 		os.Exit(1)
@@ -111,6 +123,8 @@ commands:
   icl      quick-glance at running Claude agent panes
   shkspr   open twin.toml in $EDITOR (or a recipe by name)
   tysm     kill tmux server with a farewell
+  ring     open a ringer: a named copy of a recipe's session
+  unring   drop a ringer: remove it and its session
 
 run 'twin <command> --help' for command-specific help.
 `
