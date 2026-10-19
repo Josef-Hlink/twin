@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,10 +12,46 @@ import (
 	"unsafe"
 )
 
+// exact turns a session name into a target that only matches that exact
+// session. A bare -t name falls back to prefix matching, so "twin" would
+// resolve to "twin@blue" whenever no "twin" session exists.
+func exact(name string) string {
+	return "=" + name
+}
+
+// exactSession is exact for commands whose -t is a pane target (set-option,
+// set-hook): there the "=" only applies to a session spelled "session:".
+func exactSession(name string) string {
+	return exact(name) + ":"
+}
+
+// popupClientEnv names the client a twin popup belongs to. A popup has no pane
+// of its own, so inside it tmux can't tell which client is "current" and
+// guesses the most recently active one; with two terminals attached that can
+// be the wrong one. DisplayPopup sets it, and the client-scoped commands below
+// then name their client explicitly.
+const popupClientEnv = "TWIN_CLIENT"
+
+// clientCmd builds a tmux command that acts on the current client. Inside a
+// twin popup it passes the popup's client with flag ("-c" for most commands,
+// "-t" for detach-client); elsewhere tmux resolves the client itself.
+func clientCmd(sub, flag string, args ...string) *exec.Cmd {
+	return exec.Command("tmux", slices.Concat([]string{sub}, popupClient(flag), args)...)
+}
+
+// popupClient returns flag and the popup's client inside a twin popup, and
+// nothing elsewhere.
+func popupClient(flag string) []string {
+	if c := os.Getenv(popupClientEnv); c != "" {
+		return []string{flag, c}
+	}
+	return nil
+}
+
 // HasSession returns true if a tmux session with the given name exists.
 func HasSession(name string) bool {
 	// tmux has-session exits 0 if the session exists, non-zero otherwise.
-	err := exec.Command("tmux", "has-session", "-t", name).Run()
+	err := exec.Command("tmux", "has-session", "-t", exact(name)).Run()
 	return err == nil
 }
 
@@ -29,8 +66,10 @@ func HasSession(name string) bool {
 // the percentages honest. Falls back to tmux's default when the size is
 // unknown (e.g. stdout isn't a terminal).
 // windowName, when non-empty, names the first window; tmux then disables
-// automatic-rename for it, so the name sticks.
-func NewSession(name, startDir, windowName string) (string, error) {
+// automatic-rename for it, so the name sticks. shell, when non-empty, is what
+// the first pane runs instead of the default shell (see SetDefaultCommand for
+// every pane after it).
+func NewSession(name, startDir, windowName, shell string) (string, error) {
 	args := []string{"new-session", "-d", "-s", name, "-c", startDir}
 	if windowName != "" {
 		args = append(args, "-n", windowName)
@@ -39,7 +78,60 @@ func NewSession(name, startDir, windowName string) (string, error) {
 		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
 	}
 	args = append(args, "-P", "-F", "#{pane_id}")
+	if shell != "" {
+		args = append(args, shell)
+	}
 	return paneIDOf(exec.Command("tmux", args...))
+}
+
+// SetDefaultCommand makes every new window and pane in the session, including
+// ones split by hand later, run shell instead of the default shell.
+func SetDefaultCommand(session, shell string) error {
+	return exec.Command("tmux", "set-option", "-t", exactSession(session), "default-command", shell).Run()
+}
+
+// TintSession colors a session's status line and the active pane border of
+// its windows with color (a tmux color, e.g. "red" or "colour214"). Each
+// style keeps the global value and only overrides fg, so a status bar's
+// background and the rest of its styling survive. Windows opened later get
+// the border too, through a session hook.
+func TintSession(session, color string) error {
+	for _, opt := range []string{"status-style", "status-left-style"} {
+		style := tinted(globalOption("-g", opt), color)
+		if err := exec.Command("tmux", "set-option", "-t", exactSession(session), opt, style).Run(); err != nil {
+			return fmt.Errorf("set %s: %w", opt, err)
+		}
+	}
+	border := tinted(globalOption("-gw", "pane-active-border-style"), color)
+	windows, err := exec.Command("tmux", "list-windows", "-t", exact(session), "-F", "#{window_id}").Output()
+	if err != nil {
+		return err
+	}
+	for _, w := range strings.Fields(string(windows)) {
+		if err := exec.Command("tmux", "set-option", "-w", "-t", w, "pane-active-border-style", border).Run(); err != nil {
+			return fmt.Errorf("set pane-active-border-style: %w", err)
+		}
+	}
+	hook := fmt.Sprintf("set-option -w pane-active-border-style %q", border)
+	return exec.Command("tmux", "set-hook", "-t", exactSession(session), "after-new-window", hook).Run()
+}
+
+// globalOption reads a global option's value (flag is "-g" for a session
+// option, "-gw" for a window option); "" when unset or unreadable.
+func globalOption(flag, name string) string {
+	out, err := exec.Command("tmux", "show-options", flag+"v", name).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// tinted appends a foreground color to a tmux style; later attributes win.
+func tinted(style, color string) string {
+	if style == "" || style == "default" {
+		return "fg=" + color
+	}
+	return style + ",fg=" + color
 }
 
 // NewWindow creates a new window in an existing session and returns the pane-id
@@ -134,7 +226,7 @@ func ListSessions() ([]string, error) {
 
 // CurrentSession returns the name of the currently attached tmux session.
 func CurrentSession() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{session_name}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -143,13 +235,13 @@ func CurrentSession() (string, error) {
 
 // SwitchClient switches the current tmux client to the named session.
 func SwitchClient(name string) error {
-	return exec.Command("tmux", "switch-client", "-t", name).Run()
+	return clientCmd("switch-client", "-c", "-t", exact(name)).Run()
 }
 
 // ListWindows returns the windows in a session, formatted as "index:name"
 // with tmux flags (e.g. * for active, - for last).
 func ListWindows(session string) ([]string, error) {
-	out, err := exec.Command("tmux", "list-windows", "-t", session,
+	out, err := exec.Command("tmux", "list-windows", "-t", exact(session),
 		"-F", "#{window_index}:#{window_name}#{window_flags}").Output()
 	if err != nil {
 		return nil, err
@@ -169,9 +261,21 @@ const (
 	PopupCenter                     // centered on screen
 )
 
-// DisplayPopup opens a tmux popup at the given anchor position.
+// DisplayPopup opens a tmux popup at the given anchor position, on the
+// current client, and pins the popup's own tmux calls to that client.
 func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, command string) error {
 	clientW, clientH, _ := ClientSize()
+	var pin []string
+	if tty, err := ClientTTY(); err == nil && tty != "" {
+		pin = []string{"-c", tty, "-e", popupClientEnv + "=" + tty}
+	}
+
+	// tmux refuses a popup bigger than the client ("height too large"), so
+	// shrink it to fit; fzf scrolls through whatever no longer fits. One row
+	// stays free so the top-left popup leaves row 0 visible.
+	if clientW > 0 && clientH > 1 {
+		width, height = min(width, clientW), min(height, clientH-1)
+	}
 
 	var x, y int
 	switch anchor {
@@ -183,7 +287,7 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		y = (clientH + height) / 2
 	}
 
-	return exec.Command("tmux", "display-popup",
+	out, err := exec.Command("tmux", slices.Concat([]string{"display-popup"}, pin, []string{
 		"-T", title,
 		"-x", strconv.Itoa(x),
 		"-y", strconv.Itoa(y),
@@ -191,7 +295,11 @@ func DisplayPopup(anchor PopupAnchor, title string, width, height int, style, co
 		"-h", strconv.Itoa(height),
 		"-S", style,
 		"-E", command,
-	).Run()
+	})...).CombinedOutput()
+	if msg := strings.TrimSpace(string(out)); err != nil && msg != "" {
+		return fmt.Errorf("display-popup: %s", msg)
+	}
+	return err
 }
 
 // InTmux returns true if the current process is running inside tmux.
@@ -202,7 +310,7 @@ func InTmux() bool {
 // AttachSession attaches the terminal to the named tmux session.
 // Stdin/stdout/stderr are connected so tmux takes over the terminal.
 func AttachSession(name string) error {
-	cmd := exec.Command("tmux", "attach-session", "-t", name)
+	cmd := exec.Command("tmux", "attach-session", "-t", exact(name))
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -265,7 +373,7 @@ func CapturePane(target string) (string, error) {
 
 // ClientSize returns the width and height of the current tmux client.
 func ClientSize() (width, height int, err error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_width}\t#{client_height}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_width}\t#{client_height}").Output()
 	if err != nil {
 		return 0, 0, err
 	}
@@ -310,14 +418,37 @@ func terminalSize() (cols, rows int) {
 	return int(ws.Col), int(ws.Row)
 }
 
+// DisplayMessage shows msg on the current client's status line for a few
+// seconds.
+func DisplayMessage(msg string) error {
+	return clientCmd("display-message", "-c", "-d", "3000", escapeFormat(msg)).Run()
+}
+
+// SwitchAndKill moves the current client to session `to`, shows msg there,
+// and kills session `kill`. It's a single tmux invocation (commands chained
+// with ";"), so the server finishes it even when the caller runs inside the
+// session being killed and dies with it.
+func SwitchAndKill(to, kill, msg string) error {
+	return exec.Command("tmux", slices.Concat(
+		[]string{"switch-client"}, popupClient("-c"), []string{"-t", exact(to), ";"},
+		[]string{"display-message"}, popupClient("-c"), []string{"-d", "3000", escapeFormat(msg), ";"},
+		[]string{"kill-session", "-t", exact(kill)},
+	)...).Run()
+}
+
+// escapeFormat keeps tmux from reading a # in msg as the start of a format.
+func escapeFormat(msg string) string {
+	return strings.ReplaceAll(msg, "#", "##")
+}
+
 // KillSession kills a single tmux session by name.
 func KillSession(name string) error {
-	return exec.Command("tmux", "kill-session", "-t", name).Run()
+	return exec.Command("tmux", "kill-session", "-t", exact(name)).Run()
 }
 
 // ClientTTY returns the TTY of the current tmux client (e.g. "/dev/ttys001").
 func ClientTTY() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_tty}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_tty}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -327,7 +458,7 @@ func ClientTTY() (string, error) {
 // ClientPID returns the PID of the process that launched the tmux client
 // (typically the parent shell).
 func ClientPID() (string, error) {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{client_pid}").Output()
+	out, err := clientCmd("display-message", "-c", "-p", "#{client_pid}").Output()
 	if err != nil {
 		return "", err
 	}
@@ -337,7 +468,7 @@ func ClientPID() (string, error) {
 // DetachClient detaches the current tmux client, returning control to the
 // parent terminal.
 func DetachClient() error {
-	return exec.Command("tmux", "detach-client").Run()
+	return clientCmd("detach-client", "-t").Run()
 }
 
 // KillServer kills the tmux server, terminating all sessions.

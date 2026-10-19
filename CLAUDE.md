@@ -10,12 +10,16 @@ twin has subcommands:
 - `twin tspmo` — spin up tmux sessions from TOML recipes (the main "opener")
 - `twin fr` — open a single recipe session (fzf picker, by name, or list)
 - `twin sybau` — fzf-based session switcher in a tmux popup (bind to a tmux key)
+- `twin ring` — open a ringer: a named copy of a recipe's session, made real by user-configured commands
+- `twin unring` — drop a ringer: run its remove command, kill its session
 
 The name "twin" is short, clean, and works as an acronym (tmux workspace/window something).
 Subcommand names are playful slang-inspired:
 - "tspmo" = this shit pisses me off
 - "fr" = for real
 - "sybau" = shut your bitch ass up
+- "ring" / "unring" are the exception: plain words. A ringer is a dead ringer of a
+  session, and the verbs just say what they do
 
 ## Architecture
 
@@ -34,8 +38,17 @@ twin/
       fr.go             # single recipe opener (fzf picker / name / --list)
     sybau/
       sybau.go          # fzf session picker in tmux popup
+    ring/
+      ring.go           # open (and create) a ringer
+    unring/
+      unring.go         # drop a ringer (remove command, then its session)
+    ringers/
+      ringers.go        # ringer naming, lookup, opening a ringer's session
+    popup/
+      popup.go          # tmux popup sizing/launching + fzf pickers
     config/
       config.go         # twin.toml + recipe loading
+      ringers.go        # the [ringers] block: templates, placeholders, skip-in-ringers
     tmux/
       tmux.go           # thin wrapper around tmux CLI commands
   .github/
@@ -68,7 +81,25 @@ max-options = 10
 # optional: auto-attach to this session after tspmo finishes (must be in active list).
 # if omitted, tspmo prompts the user.
 auto-attach-to = "front"
+
+# optional: ringers (see `twin ring`). twin only does the session side; these
+# commands make a copy real, however this machine does that.
+[ringers]
+names  = ["red", "green", "blue"]     # what ring offers; omit to allow any name
+dir    = "~/copies/{name}/{recipe}"    # where a ringer's session starts; {name} exactly once
+create = "mkcopy {name} {recipe} {branch}"
+remove = "rmcopy {name} {recipe}"
+enter  = "copy-shell {name}"           # optional: tmux default-command of a ringer's session
+main   = "copy-shell default {recipe}" # optional: the same for a recipe's own session
+
+[ringers.colors]                        # optional: tint per ringer name
+red = "red"
 ```
+
+Placeholders: `{recipe}`, `{name}`, `{branch}`, `{repo}` (the recipe's start-directory),
+`{dir}` (the expanded dir). In commands, values are shell-quoted only when needed and an
+empty value disappears (so `create … {branch}` without a branch just ends early). In `main`
+only `{recipe}` and `{repo}` are set.
 
 **Recipe files** (e.g. `~/.config/twin/recipes/front.toml`):
 ```toml
@@ -125,6 +156,7 @@ holding a single shell:
 - `title = "x"` titles a pane (`select-pane -T`); when any pane in a window has one, twin sets window-local `pane-border-status top` so titles are visible. Programs emitting terminal-title escapes can overwrite a title later — twin sets it once at creation
 - `focus = true` focuses that pane on open (default is pane 1); only one pane per window may set it
 - A window uses **either** window-level `command`/`commands` (single pane, the simple form above) **or** `panes`, never both
+- `skip-in-ringers = true` on a window or a pane drops its command(s) in ringer sessions — for setups where copies can't run the same dev servers side by side
 
 ### Subcommand behavior
 
@@ -142,6 +174,8 @@ holding a single shell:
 - `twin fr` — fzf picker showing recipes that don't have an open session yet
 - `twin fr <name>` — open a specific recipe directly (skip if session exists)
 - `twin fr --list` — print all available recipe names
+- the picker also lists dormant ringers (dir exists, no session), and `twin fr <recipe>@<name>` reopens one
+- recipe sessions (fr, tspmo) start every pane through `[ringers] main` when it's set
 
 **`twin sybau`**:
 1. Spawn a tmux popup containing an fzf session picker
@@ -158,8 +192,21 @@ popup shell doesn't inherit PATH context.
 **`twin shkspr`** — open config in `$EDITOR` (falls back to vim, then nano):
 - `twin shkspr` — open `twin.toml`
 - `twin shkspr <recipe>` — open `<recipe-dir>/<recipe>.toml` (a trailing `.toml` is trimmed, so `dots` and `dots.toml` are equivalent)
-- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux)
+- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux); in a ringer (`pylona@blue`) that's its recipe
 - Opening a recipe name that doesn't exist yet drops you into the editor on a fresh file — a quick way to start a new recipe
+
+**`twin ring [<recipe>@]<name> [branch] [--no-attach]`** — open a ringer, session `<recipe>@<name>`:
+- `<recipe>` defaults to the current session's recipe (`blue` inside `pylona@red` means `pylona@blue`)
+- `<name>`: no `/ . : @`, quotes, `\`, whitespace, or leading `-`; with `[ringers] names` set, only those
+- a ringer exists when its `dir` does; an existing one just gets its session (re)built from the recipe and switched to
+- a new one runs `create` (in `{repo}`, terminal attached, Ctrl-C stops the command not twin), then must have left `dir` behind
+- name and branch are picked when omitted: fzf of existing + free names (typing a new one when no `names` are set), and of `{repo}`'s branches only when `create` uses `{branch}`. Inside tmux the whole thing runs in a popup (`ring-picker`) so create's output shows
+- the session is the recipe rooted at `dir`, `skip-in-ringers` commands dropped, `enter` as its `default-command` (new-session gets it as the first pane's command, set-option for everything after, so manual splits land in the ringer too), tinted from `[ringers.colors]` (status-style, status-left-style and the active pane border get fg=<color> appended)
+
+**`twin unring [<recipe>@]<name>`** — drop a ringer:
+- runs `remove` first; a non-zero exit aborts and keeps everything (remove owns any safety checks)
+- kills the session last; dropping the ringer you're in lands you on the recipe's session first, with a summary on the status line
+- tspmo ignores ringers; reopen them with `ring` or `fr`
 
 **Teardown**: not a twin concern — just use `tmux kill-server` or kill individual sessions manually.
 
