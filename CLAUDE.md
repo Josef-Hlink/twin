@@ -10,16 +10,12 @@ twin has subcommands:
 - `twin tspmo` — spin up tmux sessions from TOML recipes (the main "opener")
 - `twin fr` — open a single recipe session (fzf picker, by name, or list)
 - `twin sybau` — fzf-based session switcher in a tmux popup (bind to a tmux key)
-- `twin wth` — hatch a twin: a git worktree of a recipe's repo with its own session
-- `twin wtf` — fold a twin: remove its worktree, session, and (when safe) branch
 
 The name "twin" is short, clean, and works as an acronym (tmux workspace/window something).
 Subcommand names are playful slang-inspired:
 - "tspmo" = this shit pisses me off
 - "fr" = for real
 - "sybau" = shut your bitch ass up
-- "wth" = what the hell (worktree hatch)
-- "wtf" = what the fuck (worktree fold)
 
 ## Architecture
 
@@ -33,36 +29,15 @@ twin/
   internal/
     tspmo/
       tspmo.go          # bulk session creation from active recipes
-      spinner.go        # braille unicode progress spinner
+      spinner.go         # braille unicode progress spinner
     fr/
       fr.go             # single recipe opener (fzf picker / name / --list)
-    frfr/
-      frfr.go           # scaffold a recipe from template.toml
     sybau/
       sybau.go          # fzf session picker in tmux popup
-    pbqt/
-      pbqt.go           # kill a session (fzf picker / name)
-    icl/
-      icl.go            # tabbed quickview of running claude panes
-    shkspr/
-      shkspr.go         # open twin.toml or a recipe in $EDITOR
-    tysm/
-      tysm.go           # kill the tmux server with a farewell
-    wth/
-      wth.go            # hatch a twin (worktree + bootstrap + session)
-    wtf/
-      wtf.go            # fold a twin (safety checks, worktree, branch, session)
-    twins/
-      twins.go          # twin naming, repo/twin lookup, opening a twin's session
     config/
       config.go         # twin.toml + recipe loading
-      color.go          # popup accent colors for tmux/fzf
-    popup/
-      popup.go          # tmux popup sizing/launching + fzf pickers
     tmux/
       tmux.go           # thin wrapper around tmux CLI commands
-    git/
-      git.go            # thin wrapper around git CLI commands
   .github/
     workflows/
       lint-pr.yml       # conventional commit PR title enforcement
@@ -93,11 +68,6 @@ max-options = 10
 # optional: auto-attach to this session after tspmo finishes (must be in active list).
 # if omitted, tspmo prompts the user.
 auto-attach-to = "front"
-
-# optional: bootstrapping shared by every recipe's twins (see `twin wth`).
-# recipes can add their own [worktree] block; the lists are appended.
-[worktree]
-copy = [".envrc", ".env", "jdh", ".claude/settings.local.json"]
 ```
 
 **Recipe files** (e.g. `~/.config/twin/recipes/front.toml`):
@@ -156,20 +126,6 @@ holding a single shell:
 - `focus = true` focuses that pane on open (default is pane 1); only one pane per window may set it
 - A window uses **either** window-level `command`/`commands` (single pane, the simple form above) **or** `panes`, never both
 
-**Twins** (optional) — how a recipe behaves when `twin wth` opens it on a git worktree:
-```toml
-[[windows]]
-command = "pnpm dev"
-skip-in-wt = true              # in twins this window opens as a plain shell
-
-[worktree]                     # appended to twin.toml's [worktree] lists
-copy  = ["apps/backend/.env"]  # untracked paths (from the repo root) to copy over
-setup = ["pnpm install"]       # run once in a fresh twin, inside its direnv env
-```
-- `skip-in-wt = true` on a window or a pane drops its command(s) in twin sessions — for dev servers and workers that would clash with the original's
-- `copy` entries are paths from the repo root, copied from the main checkout; missing ones are skipped silently, ones git already tracks are left alone
-- `setup` runs in the worktree root before the session is built; a failure (or Ctrl-C) rolls the hatch back
-
 ### Subcommand behavior
 
 **`twin tspmo`** (no additional args):
@@ -186,7 +142,6 @@ setup = ["pnpm install"]       # run once in a fresh twin, inside its direnv env
 - `twin fr` — fzf picker showing recipes that don't have an open session yet
 - `twin fr <name>` — open a specific recipe directly (skip if session exists)
 - `twin fr --list` — print all available recipe names
-- the picker also lists dormant twins (worktree exists, no session), and `twin fr <recipe>@<name>` reopens one
 
 **`twin sybau`**:
 1. Spawn a tmux popup containing an fzf session picker
@@ -196,8 +151,6 @@ setup = ["pnpm install"]       # run once in a fresh twin, inside its direnv env
 5. When `ordered-sessions` is true, sessions show numbered as `[N] name`
 6. Designed to be bound in tmux.conf: `bind-key Space run-shell "twin sybau --preview"`
 
-Twins are listed right under their recipe's session, indented and unnumbered.
-
 **`sybau-picker`** — internal subcommand that runs inside the tmux popup spawned by `sybau`.
 Not meant to be called directly. Uses `os.Executable()` for the absolute path since the
 popup shell doesn't inherit PATH context.
@@ -205,24 +158,8 @@ popup shell doesn't inherit PATH context.
 **`twin shkspr`** — open config in `$EDITOR` (falls back to vim, then nano):
 - `twin shkspr` — open `twin.toml`
 - `twin shkspr <recipe>` — open `<recipe-dir>/<recipe>.toml` (a trailing `.toml` is trimmed, so `dots` and `dots.toml` are equivalent)
-- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux); in a twin (`pylona@blue`) that's its recipe
+- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux)
 - Opening a recipe name that doesn't exist yet drops you into the editor on a fresh file — a quick way to start a new recipe
-
-**`twin wth [<recipe>@]<name> [branch] [--no-attach]`** — worktree hatch. A twin
-is a git worktree of a recipe's repo with its own session `<recipe>@<name>`:
-- `<recipe>` defaults to the current session's recipe (`blue` inside `pylona@red` means `pylona@blue`)
-- `<name>` is the twin's id and its folder `<repo>.twins/<name>/`, next to the main checkout; no `/ . : @`, whitespace, or leading `-`
-- name and branch are prompted for when omitted, never inferred: fzf of the repo's twins / of free local + remote branches, where typing a new value works too (alt-enter takes the typed text over a fuzzy match). Inside tmux the whole hatch runs in a popup (`wth-picker`)
-- an existing twin just gets its session (re)built from the recipe and switched to
-- a new twin: `git fetch`, then `git worktree add` on the branch (an existing local or remote one, or a new one from origin's default branch with no upstream), then bootstrap: copy the `[worktree]` files, `direnv allow` every `.envrc` in it, nested ones included (and load the root one once, so the panes don't all build the environment at the same moment), run `setup`
-- the session is the recipe with its start-directory moved into the worktree (keeping any offset below the repo root) and `skip-in-wt` commands dropped
-
-**`twin wtf [<recipe>@]<name>`** — worktree fold:
-- refuses, before touching anything, when the worktree has modified or untracked files (ignored ones, like the copied files, are fine) or a detached HEAD with commits no ref contains
-- `git fetch --prune`, `git worktree remove` (never `--force`), removes `<repo>.twins/` once empty
-- deletes the branch only when that loses nothing: its upstream is `[gone]` (merged + deleted PR; squash merges defeat `git branch -d`) or it has no commits beyond origin's default branch
-- kills the session last; folding the twin you're in lands you on the recipe's session first, with a summary on the status line
-- tspmo ignores twins; reopen them with `wth` or `fr`
 
 **Teardown**: not a twin concern — just use `tmux kill-server` or kill individual sessions manually.
 
@@ -253,7 +190,7 @@ go build ./cmd/twin    # produces ./twin binary
 ### Code guidelines
 
 - **Keep it lightweight.** No frameworks, no unnecessary abstractions. Standard library + minimal deps.
-- **Dependencies**: only what's truly needed. Currently: `BurntSushi/toml` for TOML parsing. fzf and git are called as external commands (not embedded).
+- **Dependencies**: only what's truly needed. Currently: `BurntSushi/toml` for TOML parsing. fzf is called as an external command (not embedded).
 - **Go style**: follow standard Go conventions (gofmt, effective Go idioms). This is a learning project — prefer clarity over cleverness.
 - **Error handling**: simple and direct. Log errors with context, exit non-zero on failure. No complex error wrapping chains.
 - **No over-engineering**: no plugin systems, no dynamic loading, no feature flags. If a feature isn't in this doc, don't add it.
