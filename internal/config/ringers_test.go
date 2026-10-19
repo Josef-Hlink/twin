@@ -149,3 +149,18 @@ func TestForRinger(t *testing.T) {
 		t.Error("ForRinger modified the original recipe")
 	}
 }
+
+func TestColorANSI(t *testing.T) {
+	for c, want := range map[Color]string{
+		"magenta":   "35",
+		"colour244": "38;5;244",
+		"214":       "38;5;214",
+		"#ff8800":   "38;2;255;136;0",
+		"nope":      "",
+		"":          "",
+	} {
+		if got := c.ANSI(); got != want {
+			t.Errorf("Color(%q).ANSI() = %q, want %q", c, got, want)
+		}
+	}
+}

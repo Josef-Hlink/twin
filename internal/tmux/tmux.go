@@ -90,11 +90,17 @@ func SetDefaultCommand(session, shell string) error {
 	return exec.Command("tmux", "set-option", "-t", exactSession(session), "default-command", shell).Run()
 }
 
-// TintSession colors a session's status line and the active pane border of
-// its windows with color (a tmux color, e.g. "red" or "colour214"). Each
-// style keeps the global value and only overrides fg, so a status bar's
-// background and the rest of its styling survive. Windows opened later get
-// the border too, through a session hook.
+// SetUserOption sets a session's user option (name starts with @), so a
+// tmux.conf can read it in formats, e.g. #{@ringer-color}.
+func SetUserOption(session, name, value string) error {
+	return exec.Command("tmux", "set-option", "-t", exactSession(session), name, value).Run()
+}
+
+// TintSession colors a session's status line and the pane borders of its
+// windows with color (a tmux color, e.g. "red" or "colour214"), and draws
+// those borders heavy. Each style keeps the global value and only overrides
+// fg, so a status bar's background and the rest of its styling survive.
+// Windows opened later get the same, through a session hook.
 func TintSession(session, color string) error {
 	for _, opt := range []string{"status-style", "status-left-style"} {
 		style := tinted(globalOption("-g", opt), color)
@@ -102,18 +108,45 @@ func TintSession(session, color string) error {
 			return fmt.Errorf("set %s: %w", opt, err)
 		}
 	}
-	border := tinted(globalOption("-gw", "pane-active-border-style"), color)
+	opts := borderTint(
+		globalOption("-gw", "pane-border-style"),
+		globalOption("-gw", "pane-active-border-style"),
+		color,
+	)
 	windows, err := exec.Command("tmux", "list-windows", "-t", exact(session), "-F", "#{window_id}").Output()
 	if err != nil {
 		return err
 	}
 	for _, w := range strings.Fields(string(windows)) {
-		if err := exec.Command("tmux", "set-option", "-w", "-t", w, "pane-active-border-style", border).Run(); err != nil {
-			return fmt.Errorf("set pane-active-border-style: %w", err)
+		for _, o := range opts {
+			if err := exec.Command("tmux", "set-option", "-w", "-t", w, o.name, o.value).Run(); err != nil {
+				return fmt.Errorf("set %s: %w", o.name, err)
+			}
 		}
 	}
-	hook := fmt.Sprintf("set-option -w pane-active-border-style %q", border)
-	return exec.Command("tmux", "set-hook", "-t", exactSession(session), "after-new-window", hook).Run()
+	return exec.Command("tmux", "set-hook", "-t", exactSession(session), "after-new-window", hookCommand(opts)).Run()
+}
+
+type windowOption struct{ name, value string }
+
+// borderTint is the per-window side of a tint: both border styles in color,
+// heavy lines.
+func borderTint(borderStyle, activeBorderStyle, color string) []windowOption {
+	return []windowOption{
+		{"pane-border-style", tinted(borderStyle, color)},
+		{"pane-active-border-style", tinted(activeBorderStyle, color)},
+		{"pane-border-lines", "heavy"},
+	}
+}
+
+// hookCommand sets every option on the hook's new window, as one tmux
+// command list.
+func hookCommand(opts []windowOption) string {
+	cmds := make([]string, len(opts))
+	for i, o := range opts {
+		cmds[i] = fmt.Sprintf("set-option -w %s %q", o.name, o.value)
+	}
+	return strings.Join(cmds, " ; ")
 }
 
 // globalOption reads a global option's value (flag is "-g" for a session

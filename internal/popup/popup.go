@@ -58,7 +58,9 @@ func launch(anchor tmux.PopupAnchor, title string, width, height int, subcommand
 // When previewCols > 0 and previewCmd is non-empty, a preview pane is shown.
 // When accent is non-empty, fzf's pointer + marker are colored to match.
 func FzfSelect(items []string, previewCols int, previewCmd string, accent config.Color) (string, error) {
-	var fzfArgs []string
+	// --ansi renders color codes in items; fzf hands the selection back
+	// without them.
+	fzfArgs := []string{"--ansi"}
 	if accent != "" {
 		c := accent.Fzf()
 		fzfArgs = append(fzfArgs, "--color", fmt.Sprintf("pointer:%s,marker:%s", c, c))
