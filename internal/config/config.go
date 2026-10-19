@@ -12,16 +12,19 @@ import (
 
 // Config represents the top-level twin.toml file.
 type Config struct {
-	RecipeDir        string   `toml:"recipe-dir"`
-	Active           []string `toml:"active"`
-	OrderedSessions  *bool    `toml:"ordered-sessions"`
-	MaxOptions       *int     `toml:"max-options"`
-	AutoAttachTo     string   `toml:"auto-attach-to"`
-	TysmMsg          string   `toml:"tysm-msg"`
-	FrBorderColor    string   `toml:"fr-border-color"`
-	SybauBorderColor string   `toml:"sybau-border-color"`
-	PbqtBorderColor  string   `toml:"pbqt-border-color"`
-	IclBorderColor   string   `toml:"icl-border-color"`
+	RecipeDir         string   `toml:"recipe-dir"`
+	Active            []string `toml:"active"`
+	OrderedSessions   *bool    `toml:"ordered-sessions"`
+	MaxOptions        *int     `toml:"max-options"`
+	AutoAttachTo      string   `toml:"auto-attach-to"`
+	TysmMsg           string   `toml:"tysm-msg"`
+	FrBorderColor     string   `toml:"fr-border-color"`
+	SybauBorderColor  string   `toml:"sybau-border-color"`
+	PbqtBorderColor   string   `toml:"pbqt-border-color"`
+	IclBorderColor    string   `toml:"icl-border-color"`
+	RingBorderColor   string   `toml:"ring-border-color"`
+	UnringBorderColor string   `toml:"unring-border-color"`
+	Ringers           Ringers  `toml:"ringers"`
 }
 
 // IsOrderedSessions returns whether sessions should be created with delays
@@ -56,6 +59,10 @@ func (c Config) BorderColor(cmd string) Color {
 		raw, def = c.PbqtBorderColor, "red"
 	case "icl":
 		raw, def = c.IclBorderColor, "colour214"
+	case "ring":
+		raw, def = c.RingBorderColor, "blue"
+	case "unring":
+		raw, def = c.UnringBorderColor, "yellow"
 	default:
 		return Color("magenta")
 	}
@@ -69,12 +76,13 @@ func (c Config) BorderColor(cmd string) Color {
 type Pane struct {
 	Title          string   `toml:"title"` // optional pane title (select-pane -T)
 	StartDirectory string   `toml:"start-directory"`
-	Command        string   `toml:"command"`    // single command; mutually exclusive with commands
-	Commands       []string `toml:"commands"`   // command list; mutually exclusive with command
-	SplitFrom      int      `toml:"split-from"` // 1-based pane number; 0 = previous pane
-	Split          string   `toml:"split"`      // "right" | "down"; defaults to "right"
-	Size           string   `toml:"size"`       // e.g. "30%"; optional (even split when empty)
-	Focus          bool     `toml:"focus"`      // focus this pane on open; default is pane 1
+	Command        string   `toml:"command"`         // single command; mutually exclusive with commands
+	Commands       []string `toml:"commands"`        // command list; mutually exclusive with command
+	SplitFrom      int      `toml:"split-from"`      // 1-based pane number; 0 = previous pane
+	Split          string   `toml:"split"`           // "right" | "down"; defaults to "right"
+	Size           string   `toml:"size"`            // e.g. "30%"; optional (even split when empty)
+	Focus          bool     `toml:"focus"`           // focus this pane on open; default is pane 1
+	SkipInRingers  bool     `toml:"skip-in-ringers"` // in ringers, open as a plain shell
 }
 
 // Window represents a single window in a recipe.
@@ -84,6 +92,7 @@ type Window struct {
 	Command        string   `toml:"command"`  // single command; mutually exclusive with commands
 	Commands       []string `toml:"commands"` // command list; mutually exclusive with command
 	Panes          []Pane   `toml:"panes"`
+	SkipInRingers  bool     `toml:"skip-in-ringers"` // in ringers, every pane opens as a plain shell
 }
 
 // chooseCommands returns the effective command list, preferring the singular
@@ -182,7 +191,7 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("loading %s: %w", path, err)
 	}
 
-	cfg.RecipeDir = expandPath(cfg.RecipeDir)
+	cfg.RecipeDir = ExpandPath(cfg.RecipeDir)
 	if err := ensureRecipeDir(cfg.RecipeDir); err != nil {
 		return cfg, err
 	}
@@ -201,6 +210,7 @@ const templateContent = `start-directory = "~/"
 # name = "editor"                           # optional fixed window name
 # command = "nvim"                          # a single command
 # commands = ["npm install", "make run"]    # or a list, one shell line each
+# skip-in-ringers = true                    # ringers (twin ring) open it as a plain shell
 
 # split a window into panes instead of using window-level command(s):
 # [[windows]]
@@ -248,7 +258,7 @@ func LoadRecipe(recipeDir, name string) (Recipe, error) {
 		return r, fmt.Errorf("loading recipe %s: %w", path, err)
 	}
 
-	r.StartDirectory = expandPath(r.StartDirectory)
+	r.StartDirectory = ExpandPath(r.StartDirectory)
 	if err := r.Validate(); err != nil {
 		return r, fmt.Errorf("invalid recipe %s: %w", path, err)
 	}
@@ -284,10 +294,10 @@ func ConfigPath() string {
 
 func configDir() string {
 	if dir := os.Getenv("TWIN_CONFIG_DIR"); dir != "" {
-		return expandPath(dir)
+		return ExpandPath(dir)
 	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(expandPath(xdg), "twin")
+		return filepath.Join(ExpandPath(xdg), "twin")
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "twin")
@@ -362,8 +372,8 @@ func recipeDirVar() string {
 	return configDirVar() + "/recipes"
 }
 
-// expandPath expands environment variables and a leading ~ in the path.
-func expandPath(path string) string {
+// ExpandPath expands environment variables and a leading ~ in the path.
+func ExpandPath(path string) string {
 	path = os.ExpandEnv(path)
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
