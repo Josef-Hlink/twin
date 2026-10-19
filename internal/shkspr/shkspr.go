@@ -9,14 +9,13 @@ import (
 
 	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/tmux"
-	"github.com/Josef-Hlink/twin/internal/twins"
 )
 
 const Usage = `usage: twin shkspr [recipe]
 
 open twin.toml in $EDITOR (or vim/nano if unset).
   recipe  open that recipe file instead (e.g. "twin shkspr dots" -> dots.toml)
-          "." means the current tmux session's recipe (a twin's too)
+          "." means the current tmux session's recipe
 `
 
 // Run opens the twin.toml config file, or a single recipe file when a recipe
@@ -42,11 +41,10 @@ func Run(args []string) error {
 			if !tmux.InTmux() {
 				return fmt.Errorf(`"." only works inside tmux`)
 			}
-			session, err := tmux.CurrentSession()
+			name, err = tmux.CurrentSession()
 			if err != nil {
 				return fmt.Errorf("could not resolve current session: %w", err)
 			}
-			name = twins.RecipeOf(session) // a twin (pylona@blue) edits its recipe
 		}
 		name = strings.TrimSuffix(name, ".toml")
 		path = filepath.Join(cfg.RecipeDir, name+".toml")
