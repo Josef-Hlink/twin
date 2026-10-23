@@ -6,26 +6,45 @@ import (
 )
 
 func TestLayoutTabs(t *testing.T) {
-	panes := []claudePane{
-		{label: "a:1", state: '-'},           // " a:1 - " = 7 cols
-		{label: "pylona@red:5", state: '-'},  // 16 cols
-		{label: "twin:1", state: '*'},        // 10 cols
-		{label: "pylona@blue:1", state: '&'}, // 17 cols
+	tabs := []tab{
+		{text: " a:1 - "},           // 7 cols
+		{text: " pylona@red:5 - "},  // 16 cols
+		{text: " twin:1 * "},        // 10 cols
+		{text: " pylona@blue:1 & "}, // 17 cols
+	}
+	names := func(rows [][]tab) [][]string {
+		var out [][]string
+		for _, row := range rows {
+			var r []string
+			for _, t := range row {
+				r = append(r, t.text)
+			}
+			out = append(out, r)
+		}
+		return out
 	}
 
 	cases := []struct {
-		width int
-		want  [][]int
+		width  int
+		prefix string
+		want   [][]string
 	}{
-		{width: 100, want: [][]int{{0, 1, 2, 3}}},
-		{width: 24, want: [][]int{{0, 1}, {2}, {3}}},  // 7+1+16=24 fits, +1+10 doesn't
-		{width: 35, want: [][]int{{0, 1, 2}, {3}}},    // 7+1+16+1+10=35 fits
-		{width: 5, want: [][]int{{0}, {1}, {2}, {3}}}, // too narrow: one per row
+		{100, "", [][]string{{" a:1 - ", " pylona@red:5 - ", " twin:1 * ", " pylona@blue:1 & "}}},
+		{24, "", [][]string{{" a:1 - ", " pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}}, // 7+1+16=24 fits
+		{35, "", [][]string{{" a:1 - ", " pylona@red:5 - ", " twin:1 * "}, {" pylona@blue:1 & "}}},
+		{5, "", [][]string{{" a:1 - "}, {" pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}},
+		{25, "xx", [][]string{{"xx a:1 - "}, {" pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}}, // prefix counts
 	}
 	for _, c := range cases {
-		got := layoutTabs(panes, c.width)
+		got := names(layoutTabs(tabs, c.width, c.prefix))
 		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("width %d: got %v, want %v", c.width, got, c.want)
+			t.Errorf("width %d prefix %q: got %v, want %v", c.width, c.prefix, got, c.want)
 		}
+	}
+}
+
+func TestVisibleWidth(t *testing.T) {
+	if got := visibleWidth("\033[7m ab \033[0m\033[38;5;214m|"); got != 5 {
+		t.Errorf("got %d, want 5", got)
 	}
 }
