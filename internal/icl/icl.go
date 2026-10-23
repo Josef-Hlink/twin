@@ -12,6 +12,7 @@ import (
 
 	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/popup"
+	"github.com/Josef-Hlink/twin/internal/ringers"
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
@@ -25,9 +26,14 @@ type claudePane struct {
 
 const Usage = `usage: twin icl
 
-interactive tabbed quickview of running claude agent panes.
-  H / left      previous tab
-  L / right     next tab
+interactive tabbed quickview of running claude agent panes, grouped by
+recipe: a recipe's own session and its ringers share one tab.
+  H / left      previous recipe
+  L / right     next recipe
+  J / down      next session of the recipe
+  K / up        previous session of the recipe
+  za            toggle the fold: a second row listing the recipe's
+                sessions, or the selected recipe inflated inline
   Enter         switch to the selected pane
   q / Esc       close
 `
@@ -98,45 +104,136 @@ func RunView() error {
 	}
 	defer restore()
 
-	selected := 0
-	buf := make([]byte, 3)
+	v := &view{groups: groupPanes(cPanes), folded: true}
+	buf := make([]byte, 16)
+	pendingZ := false
 
 	for {
-		render(os.Stdout, cPanes, selected, width, height)
+		render(os.Stdout, cPanes, v, width, height)
 
 		n, err := os.Stdin.Read(buf)
 		if err != nil {
 			break
 		}
 
-		switch {
-		// Escape key alone
-		case n == 1 && buf[0] == 27:
-			return nil
-		// q to quit
-		case n == 1 && buf[0] == 'q':
-			return nil
-		// Enter: switch to pane
-		case n == 1 && buf[0] == 13:
-			p := cPanes[selected].pane
-			target := fmt.Sprintf("%s:%d", p.SessionName, p.WindowIndex)
-			tmux.SwitchClient(p.SessionName)
-			tmux.SelectWindow(target)
-			return nil
-		// h/H or left arrow: previous tab
-		case n == 1 && (buf[0] == 'h' || buf[0] == 'H'):
-			selected = (selected - 1 + len(cPanes)) % len(cPanes)
-		case n == 3 && buf[0] == 27 && buf[1] == '[' && buf[2] == 'D':
-			selected = (selected - 1 + len(cPanes)) % len(cPanes)
-		// l/L or right arrow: next tab
-		case n == 1 && (buf[0] == 'l' || buf[0] == 'L'):
-			selected = (selected + 1) % len(cPanes)
-		case n == 3 && buf[0] == 27 && buf[1] == '[' && buf[2] == 'C':
-			selected = (selected + 1) % len(cPanes)
+		// One read may hold several keys (pasted or sent at once), so walk
+		// them all. Arrow keys arrive as ESC [ A-D and map onto hjkl.
+		for i := 0; i < n; i++ {
+			key := buf[i]
+			if key == 27 {
+				if i+2 >= n || buf[i+1] != '[' {
+					return nil // a bare Escape closes
+				}
+				key = map[byte]byte{'A': 'k', 'B': 'j', 'C': 'l', 'D': 'h'}[buf[i+2]]
+				i += 2
+			}
+
+			// z is a prefix (vim's fold keys): only za does something.
+			if pendingZ {
+				pendingZ = false
+				if key == 'a' {
+					v.folded = !v.folded
+				}
+				continue
+			}
+
+			switch key {
+			case 'q':
+				return nil
+			case 13: // Enter: switch to the selected pane
+				p := cPanes[v.current()].pane
+				target := fmt.Sprintf("%s:%d", p.SessionName, p.WindowIndex)
+				tmux.SwitchClient(p.SessionName)
+				tmux.SelectWindow(target)
+				return nil
+			case 'z':
+				pendingZ = true
+			case 'h', 'H': // previous recipe
+				v.moveGroup(-1)
+			case 'l', 'L': // next recipe
+				v.moveGroup(1)
+			case 'j', 'J': // next session of the recipe
+				v.moveMember(1)
+			case 'k', 'K': // previous session of the recipe
+				v.moveMember(-1)
+			}
 		}
 	}
 
 	return nil
+}
+
+// --- Grouping and selection ---
+
+// group is one recipe's tab: its own session (if open) and its ringers, as
+// indices into the pane list. The recipe's own session sorts first.
+type group struct {
+	recipe  string
+	members []int
+	cursor  int // the selected member, remembered across tab switches
+}
+
+// view is the state the viewer navigates: which recipe, which of its
+// sessions, and whether the ringers are folded away under the recipe tab.
+type view struct {
+	groups   []group
+	selected int
+	folded   bool
+}
+
+// groupPanes groups the panes by recipe, keeping the panes' order (tmux lists
+// sessions alphabetically, so a recipe's own session comes before its ringers).
+func groupPanes(panes []claudePane) []group {
+	var groups []group
+	index := make(map[string]int)
+	for i, p := range panes {
+		recipe := ringers.RecipeOf(p.pane.SessionName)
+		g, ok := index[recipe]
+		if !ok {
+			g = len(groups)
+			index[recipe] = g
+			groups = append(groups, group{recipe: recipe})
+		}
+		groups[g].members = append(groups[g].members, i)
+	}
+	return groups
+}
+
+func (v *view) current() int {
+	g := v.groups[v.selected]
+	return g.members[g.cursor]
+}
+
+func (v *view) moveGroup(d int) {
+	v.selected = (v.selected + d + len(v.groups)) % len(v.groups)
+}
+
+func (v *view) moveMember(d int) {
+	g := &v.groups[v.selected]
+	g.cursor = (g.cursor + d + len(g.members)) % len(g.members)
+}
+
+// hasRingers reports whether the group holds anything but the recipe's own
+// session: a group of one plain session shows as a single tab.
+func (g group) hasRingers(panes []claudePane) bool {
+	if len(g.members) > 1 {
+		return true
+	}
+	_, _, isRinger := ringers.SplitSession(panes[g.members[0]].pane.SessionName)
+	return isRinger
+}
+
+// worstState picks the most urgent state among the group's sessions:
+// a menu waiting beats busy beats idle.
+func (g group) worstState(panes []claudePane) byte {
+	rank := map[byte]int{'-': 0, '*': 1, '&': 2}
+	worst := byte('-')
+	for _, i := range g.members {
+		if rank[panes[i].state] > rank[worst] {
+			worst = panes[i].state
+		}
+	}
+	return worst
 }
 
 // --- Terminal helpers ---
@@ -243,46 +340,58 @@ const (
 	ansiDim     = "\033[2m"
 )
 
-// render draws the full TUI: tab bar, separator, preview, status line.
-func render(w io.Writer, panes []claudePane, selected, width, height int) {
+// tab is one cell of a tab row.
+type tab struct {
+	text     string
+	selected bool
+}
+
+// render draws the full TUI: tab rows, separator, preview, status line.
+func render(w io.Writer, panes []claudePane, v *view, width, height int) {
 	var b strings.Builder
 
 	// Clear screen and move cursor home.
 	b.WriteString(ansiClear)
 
-	// --- Tab bar (line 1) ---
-	b.WriteString(ansiOrange)
-	var tabBar strings.Builder
-	for i, p := range panes {
-		tab := fmt.Sprintf(" %s %c ", p.label, p.state)
-		if i == selected {
-			tabBar.WriteString(ansiReverse)
-			tabBar.WriteString(tab)
-			tabBar.WriteString(ansiReset)
-			tabBar.WriteString(ansiOrange)
-		} else {
-			tabBar.WriteString(tab)
-		}
-		if i < len(panes)-1 {
-			tabBar.WriteString("|")
-		}
+	// --- Tab rows ---
+	var rows [][]tab
+	if v.folded {
+		rows = layoutTabs(recipeTabs(panes, v, false), width, "")
+		rows = append(rows, layoutTabs(memberTabs(panes, v.groups[v.selected]), width, "  ↳")...)
+	} else {
+		rows = layoutTabs(recipeTabs(panes, v, true), width, "")
 	}
-	// Pad or truncate tab bar to width.
-	tabStr := tabBar.String()
-	b.WriteString(tabStr)
-	b.WriteString(ansiReset)
-	b.WriteString("\r\n")
+	for _, row := range rows {
+		b.WriteString(ansiOrange)
+		var line strings.Builder
+		for j, t := range row {
+			if t.selected {
+				line.WriteString(ansiReverse)
+				line.WriteString(t.text)
+				line.WriteString(ansiReset)
+				line.WriteString(ansiOrange)
+			} else {
+				line.WriteString(t.text)
+			}
+			if j < len(row)-1 {
+				line.WriteString("|")
+			}
+		}
+		b.WriteString(truncVisible(line.String(), width))
+		b.WriteString(ansiReset)
+		b.WriteString("\r\n")
+	}
 
-	// --- Separator (line 2) ---
+	// --- Separator ---
 	b.WriteString(ansiOrange)
 	b.WriteString(strings.Repeat("━", width))
 	b.WriteString(ansiReset)
 	b.WriteString("\r\n")
 
-	// --- Preview area (lines 3 to height-1) ---
-	previewHeight := max(height-3, 1) // tab bar + separator + status line
+	// --- Preview area (below the separator, above the status line) ---
+	previewHeight := max(height-len(rows)-2, 1) // tab rows + separator + status line
 
-	content := panes[selected].content
+	content := panes[v.current()].content
 	previewLines := lastLines(content, previewHeight)
 
 	for i := range previewHeight {
@@ -296,11 +405,107 @@ func render(w io.Writer, panes []claudePane, selected, width, height int) {
 
 	// --- Status line (last line) ---
 	b.WriteString(ansiDim)
-	status := " H/L: navigate  Enter: switch  q: close"
+	status := " H/L: recipe  J/K: session  za: fold  Enter: switch  q: close"
 	b.WriteString(truncVisible(status, width))
 	b.WriteString(ansiReset)
 
 	w.Write([]byte(b.String()))
+}
+
+// recipeTabs builds the recipe row: " recipe state " for a lone session,
+// " recipe N state " for a recipe with ringers (N sessions, worst state).
+// Inflated, the selected recipe instead spells out its sessions inline and
+// the selection sits on one of them rather than on the recipe.
+func recipeTabs(panes []claudePane, v *view, inflate bool) []tab {
+	tabs := make([]tab, len(v.groups))
+	for i, g := range v.groups {
+		sel := i == v.selected
+		switch {
+		case sel && inflate:
+			var parts []string
+			for _, m := range memberTabs(panes, g) {
+				if m.selected {
+					parts = append(parts, ansiReverse+m.text+ansiReset+ansiOrange)
+				} else {
+					parts = append(parts, m.text)
+				}
+			}
+			tabs[i] = tab{text: fmt.Sprintf(" %s {%s} ", g.recipe, strings.Join(parts, "|"))}
+		case g.hasRingers(panes):
+			tabs[i] = tab{text: fmt.Sprintf(" %s %d %c ", g.recipe, len(g.members), g.worstState(panes)), selected: sel}
+		default:
+			tabs[i] = tab{text: fmt.Sprintf(" %s %c ", g.recipe, panes[g.members[0]].state), selected: sel}
+		}
+	}
+	return tabs
+}
+
+// memberTabs builds a recipe's session row: the recipe's own session keeps
+// its full "recipe:win" label, ringers shorten to "@name:win".
+func memberTabs(panes []claudePane, g group) []tab {
+	tabs := make([]tab, len(g.members))
+	for j, i := range g.members {
+		p := panes[i]
+		label := p.label
+		if _, name, ok := ringers.SplitSession(p.pane.SessionName); ok {
+			label = fmt.Sprintf("%s%s:%d", ringers.Sep, name, p.pane.WindowIndex)
+		}
+		tabs[j] = tab{text: fmt.Sprintf(" %s %c ", label, p.state), selected: j == g.cursor}
+	}
+	return tabs
+}
+
+// layoutTabs splits the tabs into rows that fit in width columns, with a "|"
+// between neighbours. prefix leads the first row (and counts toward it).
+// A tab wider than the whole row still gets a row of its own; render
+// truncates it.
+func layoutTabs(tabs []tab, width int, prefix string) [][]tab {
+	var rows [][]tab
+	var row []tab
+	used := utf8.RuneCountInString(prefix)
+	for _, t := range tabs {
+		w := visibleWidth(t.text)
+		need := w
+		if len(row) > 0 {
+			need++ // the "|" separator
+		}
+		if len(row) > 0 && used+need > width {
+			rows = append(rows, row)
+			row, used, need = nil, 0, w
+		}
+		row = append(row, t)
+		used += need
+	}
+	if len(row) > 0 {
+		rows = append(rows, row)
+	}
+	if len(rows) > 0 && prefix != "" {
+		rows[0][0].text = prefix + rows[0][0].text
+	}
+	return rows
+}
+
+// visibleWidth counts a string's columns, skipping ANSI escape sequences.
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(stripANSI(s))
+}
+
+// stripANSI removes \033[...m sequences.
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if i+1 < len(s) && s[i] == '\033' && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			i = min(j+1, len(s))
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
 
 // truncVisible truncates a string to n visible columns, skipping ANSI
