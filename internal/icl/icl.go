@@ -250,37 +250,37 @@ func render(w io.Writer, panes []claudePane, selected, width, height int) {
 	// Clear screen and move cursor home.
 	b.WriteString(ansiClear)
 
-	// --- Tab bar (line 1) ---
-	b.WriteString(ansiOrange)
-	var tabBar strings.Builder
-	for i, p := range panes {
-		tab := fmt.Sprintf(" %s %c ", p.label, p.state)
-		if i == selected {
-			tabBar.WriteString(ansiReverse)
-			tabBar.WriteString(tab)
-			tabBar.WriteString(ansiReset)
-			tabBar.WriteString(ansiOrange)
-		} else {
-			tabBar.WriteString(tab)
+	// --- Tab bar (one or more rows) ---
+	rows := layoutTabs(panes, width)
+	for _, row := range rows {
+		b.WriteString(ansiOrange)
+		for j, i := range row {
+			p := panes[i]
+			tab := tabText(p)
+			if i == selected {
+				b.WriteString(ansiReverse)
+				b.WriteString(tab)
+				b.WriteString(ansiReset)
+				b.WriteString(ansiOrange)
+			} else {
+				b.WriteString(tab)
+			}
+			if j < len(row)-1 {
+				b.WriteString("|")
+			}
 		}
-		if i < len(panes)-1 {
-			tabBar.WriteString("|")
-		}
+		b.WriteString(ansiReset)
+		b.WriteString("\r\n")
 	}
-	// Pad or truncate tab bar to width.
-	tabStr := tabBar.String()
-	b.WriteString(tabStr)
-	b.WriteString(ansiReset)
-	b.WriteString("\r\n")
 
-	// --- Separator (line 2) ---
+	// --- Separator ---
 	b.WriteString(ansiOrange)
 	b.WriteString(strings.Repeat("━", width))
 	b.WriteString(ansiReset)
 	b.WriteString("\r\n")
 
-	// --- Preview area (lines 3 to height-1) ---
-	previewHeight := max(height-3, 1) // tab bar + separator + status line
+	// --- Preview area (below the separator, above the status line) ---
+	previewHeight := max(height-len(rows)-2, 1) // tab rows + separator + status line
 
 	content := panes[selected].content
 	previewLines := lastLines(content, previewHeight)
@@ -301,6 +301,37 @@ func render(w io.Writer, panes []claudePane, selected, width, height int) {
 	b.WriteString(ansiReset)
 
 	w.Write([]byte(b.String()))
+}
+
+// tabText renders one tab: " session:window state ".
+func tabText(p claudePane) string {
+	return fmt.Sprintf(" %s %c ", p.label, p.state)
+}
+
+// layoutTabs splits the tabs into rows that fit in width columns, with a "|"
+// between neighbours. Each row holds pane indices. A tab wider than the whole
+// row still gets a row of its own (the terminal truncates it).
+func layoutTabs(panes []claudePane, width int) [][]int {
+	var rows [][]int
+	var row []int
+	used := 0
+	for i, p := range panes {
+		w := utf8.RuneCountInString(tabText(p))
+		need := w
+		if len(row) > 0 {
+			need++ // the "|" separator
+		}
+		if len(row) > 0 && used+need > width {
+			rows = append(rows, row)
+			row, used, need = nil, 0, w
+		}
+		row = append(row, i)
+		used += need
+	}
+	if len(row) > 0 {
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // truncVisible truncates a string to n visible columns, skipping ANSI
