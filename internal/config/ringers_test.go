@@ -16,6 +16,7 @@ names  = ["red", "blue"]
 dir    = "~/copies/{name}/{recipe}"
 create = "mkcopy {name} {recipe} {branch}"
 remove = "rmcopy {name} {recipe}"
+force-remove = "rmcopy {name} {recipe} --force"
 enter  = "copy-shell {name} {dir}"
 main   = "copy-main {recipe} {repo}"
 
@@ -29,7 +30,7 @@ func TestRingersDecode(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := cfg.Ringers
-	if len(r.Names) != 2 || r.Create == "" || r.Remove == "" || r.Enter == "" || r.Main == "" {
+	if len(r.Names) != 2 || r.Create == "" || r.Remove == "" || r.ForceRemove == "" || r.Enter == "" || r.Main == "" {
 		t.Fatalf("decoded %+v", r)
 	}
 	if err := r.Validate(); err != nil {
