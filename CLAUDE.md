@@ -11,7 +11,7 @@ twin has subcommands:
 - `twin fr` — open a single recipe session (fzf picker, by name, or list)
 - `twin sybau` — fzf-based session switcher in a tmux popup (bind to a tmux key)
 - `twin ring` — open a ringer: a named copy of a recipe's session, made real by user-configured commands
-- `twin unring` — drop a ringer: run its remove command, kill its session
+- `twin unring` — drop a ringer: run its remove (or force-remove) command, kill its session
 
 The name "twin" is short, clean, and works as an acronym (tmux workspace/window something).
 Subcommand names are playful slang-inspired:
@@ -89,6 +89,7 @@ names  = ["red", "green", "blue"]     # what ring offers; omit to allow any name
 dir    = "~/copies/{name}/{recipe}"    # where a ringer's session starts; {name} exactly once
 create = "mkcopy {name} {recipe} {branch}"
 remove = "rmcopy {name} {recipe}"
+force-remove = "rmcopy {name} {recipe} --force" # optional: what unring --force runs
 enter  = "copy-shell {name}"           # optional: tmux default-command of a ringer's session
 main   = "copy-shell default {recipe}" # optional: the same for a recipe's own session
 
@@ -203,8 +204,9 @@ popup shell doesn't inherit PATH context.
 - name and branch are picked when omitted: fzf of existing + free names (typing a new one when no `names` are set), and of `{repo}`'s branches only when `create` uses `{branch}`. Inside tmux the whole thing runs in a popup (`ring-picker`) so create's output shows
 - the session is the recipe rooted at `dir`, `skip-in-ringers` commands dropped, `enter` as its `default-command` (new-session gets it as the first pane's command, set-option for everything after, so manual splits land in the ringer too), tinted from `[ringers.colors]` (status-style, status-left-style and both pane border styles get fg=<color> appended, pane-border-lines heavy; per window plus an after-new-window session hook), and the session user options `@ringer` / `@ringer-color` set for tmux.conf formats
 
-**`twin unring [<recipe>@]<name>`** — drop a ringer:
+**`twin unring [<recipe>@]<name> [--force]`** — drop a ringer:
 - runs `remove` first; a non-zero exit aborts and keeps everything (remove owns any safety checks)
+- `--force` runs `force-remove` instead (an error when it's unset; never falls back to `remove`), for throwing away work `remove` would refuse to delete. No confirmation prompt; the popup path passes the flag on to `unring-picker`
 - kills the session last; dropping the ringer you're in lands you on the recipe's session first, with a summary on the status line
 - tspmo ignores ringers; reopen them with `ring` or `fr`
 

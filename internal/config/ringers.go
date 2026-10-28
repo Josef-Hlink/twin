@@ -12,13 +12,14 @@ import (
 // these commands make the copy itself real, however the user's setup does
 // that (a clone, a container, a remote box...).
 type Ringers struct {
-	Names  []string          `toml:"names"`  // the names ring offers; empty allows any
-	Dir    string            `toml:"dir"`    // where a ringer's session starts; must use {name}
-	Create string            `toml:"create"` // makes a new ringer; must leave Dir behind
-	Remove string            `toml:"remove"` // drops one; a non-zero exit keeps it
-	Enter  string            `toml:"enter"`  // optional: every shell in a ringer starts through it
-	Main   string            `toml:"main"`   // optional: same, for the recipe's own session
-	Colors map[string]string `toml:"colors"` // optional: tint per ringer name
+	Names       []string          `toml:"names"`        // the names ring offers; empty allows any
+	Dir         string            `toml:"dir"`          // where a ringer's session starts; must use {name}
+	Create      string            `toml:"create"`       // makes a new ringer; must leave Dir behind
+	Remove      string            `toml:"remove"`       // drops one; a non-zero exit keeps it
+	ForceRemove string            `toml:"force-remove"` // optional: what unring --force runs instead of Remove
+	Enter       string            `toml:"enter"`        // optional: every shell in a ringer starts through it
+	Main        string            `toml:"main"`         // optional: same, for the recipe's own session
+	Colors      map[string]string `toml:"colors"`       // optional: tint per ringer name
 }
 
 // Vars are the values a [ringers] template can refer to as {recipe}, {name},
@@ -68,7 +69,8 @@ func (r Ringers) DirFor(v Vars) string {
 	return ExpandPath(expand(r.Dir, v.values(""), false))
 }
 
-// Command expands a command template (create, remove, enter) for one ringer.
+// Command expands a command template (create, remove, force-remove, enter)
+// for one ringer.
 // {dir} is the ringer's expanded directory.
 func (r Ringers) Command(tmpl string, v Vars) string {
 	return expand(tmpl, v.values(r.DirFor(v)), true)

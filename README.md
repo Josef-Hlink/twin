@@ -157,6 +157,7 @@ names  = ["red", "green", "blue"]      # what `ring` offers; omit to allow any n
 dir    = "~/copies/{name}/{recipe}"     # where a ringer's session starts
 create = "mkcopy {name} {recipe} {branch}"
 remove = "rmcopy {name} {recipe}"
+force-remove = "rmcopy {name} {recipe} --force"  # optional: what `unring --force` runs
 enter  = "copy-shell {name}"            # optional: every shell in the ringer starts through this
 main   = "copy-shell default {recipe}"  # optional: same, for the recipe's own session
 
@@ -172,6 +173,8 @@ red = "red"
 - `create` must leave `dir` behind; a non-zero exit means no ringer
 - `remove` decides what's safe to delete: a non-zero exit keeps the ringer, so put any
   "is there unpushed work?" check in there
+- `force-remove` is for the times you want a ringer gone anyway: `unring --force` runs
+  it instead of `remove`, with no prompt of its own. Without it, `--force` fails
 - `enter` becomes the session's tmux `default-command`, so every window and pane —
   including ones you split by hand later — starts inside the ringer
 - `skip-in-ringers = true` on a recipe window or pane opens it as a plain shell in
@@ -256,8 +259,9 @@ Drop a ringer: runs `remove`, then kills its session. If you're in it, you land 
 recipe's own session.
 
 ```sh
-twin unring red        # drop ringer "red" of the current session's recipe
-twin unring            # pick it in fzf
+twin unring red          # drop ringer "red" of the current session's recipe
+twin unring              # pick it in fzf
+twin unring --force red  # run force-remove instead, unpushed work and all
 ```
 
 ## Disclaimer
