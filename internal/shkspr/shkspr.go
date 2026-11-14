@@ -46,7 +46,7 @@ func Run(args []string) error {
 			if err != nil {
 				return fmt.Errorf("could not resolve current session: %w", err)
 			}
-			name = ringers.RecipeOf(session) // a ringer (pylona@blue) edits its recipe
+			name = ringers.RecipeOf(session) // a ringer (twin@blue) edits its recipe
 		}
 		name = strings.TrimSuffix(name, ".toml")
 		path = filepath.Join(cfg.RecipeDir, name+".toml")

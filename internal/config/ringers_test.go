@@ -81,9 +81,9 @@ func TestRingersExpand(t *testing.T) {
 		Enter:  "copy-shell {name}",
 		Main:   "copy-main {recipe} {repo} {name}{branch}{dir}",
 	}
-	v := Vars{Recipe: "pylona", Name: "red", Repo: "/home/j/Developer/pro/pylona"}
+	v := Vars{Recipe: "twin", Name: "red", Repo: "/home/j/Developer/own/twin"}
 
-	if got, want := r.DirFor(v), filepath.Join(home, "copies/red/pylona"); got != want {
+	if got, want := r.DirFor(v), filepath.Join(home, "copies/red/twin"); got != want {
 		t.Errorf("DirFor() = %q, want %q", got, want)
 	}
 	if got, want := (Ringers{Dir: "$COPIES/{name}"}).DirFor(v), "/srv/copies/red"; got != want {
@@ -92,7 +92,7 @@ func TestRingersExpand(t *testing.T) {
 
 	// No branch: the placeholder vanishes instead of becoming '' (an empty
 	// argument), and {dir} is the expanded directory.
-	want := "mkcopy red pylona  --at " + filepath.Join(home, "copies/red/pylona")
+	want := "mkcopy red twin  --at " + filepath.Join(home, "copies/red/twin")
 	if got := r.Command(r.Create, v); got != want {
 		t.Errorf("Command(create) = %q, want %q", got, want)
 	}
@@ -107,25 +107,25 @@ func TestRingersExpand(t *testing.T) {
 	}
 
 	// main knows only recipe and repo.
-	if got, want := r.MainCommand("pylona", "/home/j/pro pylona"), "copy-main pylona '/home/j/pro pylona' "; got != want {
+	if got, want := r.MainCommand("twin", "/home/j/own twin"), "copy-main twin '/home/j/own twin' "; got != want {
 		t.Errorf("MainCommand() = %q, want %q", got, want)
 	}
-	if got := (Ringers{}).MainCommand("pylona", "/x"); got != "" {
+	if got := (Ringers{}).MainCommand("twin", "/x"); got != "" {
 		t.Errorf("MainCommand() without main = %q, want empty", got)
 	}
 }
 
 func TestRingersDirPattern(t *testing.T) {
 	r := Ringers{Dir: "{repo}.copies/{name}/app"}
-	prefix, suffix := r.DirPattern("pylona", "/src/pylona")
-	if prefix != "/src/pylona.copies/" || suffix != "/app" {
+	prefix, suffix := r.DirPattern("twin", "/src/twin")
+	if prefix != "/src/twin.copies/" || suffix != "/app" {
 		t.Fatalf("DirPattern() = %q, %q", prefix, suffix)
 	}
 }
 
 func TestForRinger(t *testing.T) {
 	recipe := Recipe{
-		StartDirectory: "/src/pylona",
+		StartDirectory: "/src/twin",
 		Windows: []Window{
 			{Command: "nvim"},
 			{Command: "pnpm dev", SkipInRingers: true},
@@ -135,8 +135,8 @@ func TestForRinger(t *testing.T) {
 			}},
 		},
 	}
-	got := recipe.ForRinger("/copies/red/pylona/")
-	if got.StartDirectory != "/copies/red/pylona" {
+	got := recipe.ForRinger("/copies/red/twin/")
+	if got.StartDirectory != "/copies/red/twin" {
 		t.Errorf("StartDirectory = %q", got.StartDirectory)
 	}
 	if got.Windows[0].Command != "nvim" || got.Windows[1].Command != "" {

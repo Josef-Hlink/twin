@@ -193,11 +193,11 @@ popup shell doesn't inherit PATH context.
 **`twin shkspr`** — open config in `$EDITOR` (falls back to vim, then nano):
 - `twin shkspr` — open `twin.toml`
 - `twin shkspr <recipe>` — open `<recipe-dir>/<recipe>.toml` (a trailing `.toml` is trimmed, so `dots` and `dots.toml` are equivalent)
-- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux); in a ringer (`pylona@blue`) that's its recipe
+- `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux); in a ringer (`twin@blue`) that's its recipe
 - Opening a recipe name that doesn't exist yet drops you into the editor on a fresh file — a quick way to start a new recipe
 
 **`twin ring [<recipe>@]<name> [branch] [--no-attach]`** — open a ringer, session `<recipe>@<name>`:
-- `<recipe>` defaults to the current session's recipe (`blue` inside `pylona@red` means `pylona@blue`)
+- `<recipe>` defaults to the current session's recipe (`blue` inside `twin@red` means `twin@blue`)
 - `<name>`: no `/ . : @`, quotes, `\`, whitespace, or leading `-`; with `[ringers] names` set, only those
 - a ringer exists when its `dir` does; an existing one just gets its session (re)built from the recipe and switched to
 - a new one runs `create` (in `{repo}`, terminal attached, Ctrl-C stops the command not twin), then must have left `dir` behind

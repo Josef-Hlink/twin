@@ -8,9 +8,9 @@ import (
 )
 
 func TestBuildLines(t *testing.T) {
-	// Creation order: a ringer of dots, then misc, a ringer of pylona, and a ringer
-	// whose recipe session (krant) isn't running.
-	sessions := []string{"dots", "pylona", "dots@x", "misc", "pylona@blue", "krant@old"}
+	// Creation order: a ringer of dots, then misc, a ringer of twin, and a ringer
+	// whose recipe session (klym) isn't running.
+	sessions := []string{"dots", "twin", "dots@x", "misc", "twin@blue", "klym@old"}
 
 	tests := []struct {
 		name     string
@@ -21,19 +21,19 @@ func TestBuildLines(t *testing.T) {
 		{
 			name:    "grouped, unnumbered",
 			current: "misc",
-			want:    []string{"dots", "  dots@x", "pylona", "  pylona@blue", "krant@old"},
+			want:    []string{"dots", "  dots@x", "twin", "  twin@blue", "klym@old"},
 		},
 		{
 			name:     "numbered: ringers indented, numbers skip only the current session",
-			current:  "pylona",
+			current:  "twin",
 			numbered: true,
-			want:     []string{"[0] dots", "    dots@x", "pylona@blue", "[2] misc", "krant@old"},
+			want:     []string{"[0] dots", "    dots@x", "twin@blue", "[2] misc", "klym@old"},
 		},
 		{
 			name:     "current ringer is left out",
-			current:  "pylona@blue",
+			current:  "twin@blue",
 			numbered: true,
-			want:     []string{"[0] dots", "    dots@x", "[1] pylona", "[2] misc", "krant@old"},
+			want:     []string{"[0] dots", "    dots@x", "[1] twin", "[2] misc", "klym@old"},
 		},
 	}
 	for _, tt := range tests {
@@ -54,12 +54,12 @@ func TestBuildLines(t *testing.T) {
 func TestBuildLinesColorsRingers(t *testing.T) {
 	colors := map[string]config.Color{"blue": "blue", "old": "colour244"}
 	colorOf := func(name string) config.Color { return colors[name] }
-	got := buildLines([]string{"pylona", "pylona@blue", "misc", "krant@old"}, "misc", false, colorOf)
-	want := []string{"pylona", "  \x1b[34mpylona@blue\x1b[0m", "\x1b[38;5;244mkrant@old\x1b[0m"}
+	got := buildLines([]string{"twin", "twin@blue", "misc", "klym@old"}, "misc", false, colorOf)
+	want := []string{"twin", "  \x1b[34mtwin@blue\x1b[0m", "\x1b[38;5;244mklym@old\x1b[0m"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("buildLines() =\n%q\nwant\n%q", got, want)
 	}
-	for i, s := range []string{"pylona", "pylona@blue", "krant@old"} {
+	for i, s := range []string{"twin", "twin@blue", "klym@old"} {
 		if sessionOf(got[i]) != s {
 			t.Fatalf("sessionOf(%q) = %q, want %q", got[i], sessionOf(got[i]), s)
 		}

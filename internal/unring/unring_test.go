@@ -9,21 +9,21 @@ import (
 func TestParse(t *testing.T) {
 	t.Setenv("TMUX", "") // outside tmux: the recipe must be spelled out
 
-	o, err := parse([]string{"pylona@red"})
-	if err != nil || o.recipe != "pylona" || o.name != "red" || o.force {
-		t.Fatalf("parse(pylona@red) = %+v, %v", o, err)
+	o, err := parse([]string{"twin@red"})
+	if err != nil || o.recipe != "twin" || o.name != "red" || o.force {
+		t.Fatalf("parse(twin@red) = %+v, %v", o, err)
 	}
 	// --force goes before or after the target.
-	for _, args := range [][]string{{"--force", "pylona@red"}, {"pylona@red", "--force"}} {
+	for _, args := range [][]string{{"--force", "twin@red"}, {"twin@red", "--force"}} {
 		o, err := parse(args)
-		if err != nil || o.recipe != "pylona" || o.name != "red" || !o.force {
+		if err != nil || o.recipe != "twin" || o.name != "red" || !o.force {
 			t.Fatalf("parse(%q) = %+v, %v", args, o, err)
 		}
 	}
-	if _, err := parse([]string{"pylona@red", "--forse"}); err == nil {
+	if _, err := parse([]string{"twin@red", "--forse"}); err == nil {
 		t.Fatal("parse accepted an unknown flag")
 	}
-	if _, err := parse([]string{"pylona@red", "pylona@blue"}); err == nil {
+	if _, err := parse([]string{"twin@red", "twin@blue"}); err == nil {
 		t.Fatal("parse accepted two targets")
 	}
 }
