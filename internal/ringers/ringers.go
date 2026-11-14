@@ -21,7 +21,7 @@ import (
 )
 
 // Sep joins a recipe and a ringer's name into the ringer's session name, e.g.
-// "pylona@blue".
+// "twin@blue".
 const Sep = "@"
 
 // SessionName returns the session name of a recipe's ringer.
@@ -57,7 +57,7 @@ func ValidateName(name string) error {
 }
 
 // ParseTarget splits a "[recipe@]name" argument. Without a recipe, it's the
-// current session's recipe (so "blue" in pylona@red means pylona@blue). name
+// current session's recipe (so "blue" in twin@red means twin@blue). name
 // is empty when it still has to be picked.
 func ParseTarget(arg string) (recipe, name string, err error) {
 	if recipe, name, ok := strings.Cut(arg, Sep); ok {
