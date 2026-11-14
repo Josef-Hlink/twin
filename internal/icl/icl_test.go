@@ -1,50 +1,137 @@
 package icl
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/Josef-Hlink/twin/internal/config"
+	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
-func TestLayoutTabs(t *testing.T) {
-	tabs := []tab{
-		{text: " a:1 - "},           // 7 cols
-		{text: " pylona@red:5 - "},  // 16 cols
-		{text: " twin:1 * "},        // 10 cols
-		{text: " pylona@blue:1 & "}, // 17 cols
-	}
-	names := func(rows [][]tab) [][]string {
-		var out [][]string
-		for _, row := range rows {
-			var r []string
-			for _, t := range row {
-				r = append(r, t.text)
-			}
-			out = append(out, r)
-		}
-		return out
-	}
+func noColor(string) config.Color { return "" }
 
+// fakePanes builds panes from "session:window" labels.
+func fakePanes(labels ...string) []claudePane {
+	panes := make([]claudePane, len(labels))
+	for i, l := range labels {
+		session, win, _ := strings.Cut(l, ":")
+		var w int
+		fmt.Sscan(win, &w)
+		panes[i] = claudePane{
+			pane:  tmux.Pane{SessionName: session, WindowIndex: w},
+			label: l,
+			state: '-',
+		}
+	}
+	return panes
+}
+
+func labels(rows []row) []string {
+	var out []string
+	for _, r := range rows {
+		out = append(out, r.label)
+	}
+	return out
+}
+
+func TestBuildRows(t *testing.T) {
 	cases := []struct {
-		width  int
-		prefix string
-		want   [][]string
+		name  string
+		panes []string
+		want  []string
 	}{
-		{100, "", [][]string{{" a:1 - ", " pylona@red:5 - ", " twin:1 * ", " pylona@blue:1 & "}}},
-		{24, "", [][]string{{" a:1 - ", " pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}}, // 7+1+16=24 fits
-		{35, "", [][]string{{" a:1 - ", " pylona@red:5 - ", " twin:1 * "}, {" pylona@blue:1 & "}}},
-		{5, "", [][]string{{" a:1 - "}, {" pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}},
-		{25, "xx", [][]string{{"xx a:1 - "}, {" pylona@red:5 - "}, {" twin:1 * "}, {" pylona@blue:1 & "}}}, // prefix counts
+		{"single windows", []string{"dots:1", "klym@blue:1", "klym:1", "klym@red:1", "twin@green:1"}, []string{
+			"dots:1",
+			"klym:1",
+			"├ @blue:1",
+			"└ @red:1",
+			"twin", // header: twin's own session runs no claude
+			"└ @green:1",
+		}},
+		{"several windows", []string{"dots:1", "dots:2", "klym:1", "klym:2", "klym@red:1", "klym@red:3"}, []string{
+			"dots",
+			"├ :1",
+			"└ :2",
+			"klym",
+			"├ :1",
+			"├ :2",
+			"└ @red",
+			"  ├ :1",
+			"  └ :3",
+		}},
+		{"ringer folder mid-list", []string{"twin:1", "twin@blue:1", "twin@blue:2", "twin@red:4"}, []string{
+			"twin:1",
+			"├ @blue",
+			"│ ├ :1",
+			"│ └ :2",
+			"└ @red:4",
+		}},
 	}
 	for _, c := range cases {
-		got := names(layoutTabs(tabs, c.width, c.prefix))
-		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("width %d prefix %q: got %v, want %v", c.width, c.prefix, got, c.want)
+		if got := labels(buildRows(fakePanes(c.panes...), noColor)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
 	}
 }
 
-func TestVisibleWidth(t *testing.T) {
-	if got := visibleWidth("\033[7m ab \033[0m\033[38;5;214m|"); got != 5 {
-		t.Errorf("got %d, want 5", got)
+func TestRingerColors(t *testing.T) {
+	colors := config.Ringers{Colors: map[string]string{"blue": "blue", "red": "colour196"}}
+	rows := buildRows(fakePanes("klym:1", "klym@blue:1", "klym@blue:2", "klym@red:1", "klym@green:1"), colors.Color)
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.label+"="+r.color)
+	}
+	want := []string{
+		"klym:1=",
+		"├ @blue=34", // the folder and its windows all take blue
+		"│ ├ :1=34",
+		"│ └ :2=34",
+		"├ @red:1=38;5;196",
+		"└ @green:1=", // no color configured: stays orange
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestNavigation(t *testing.T) {
+	// rows: twin (header), @green:1, dots:1, klym:1, @blue:1
+	v := newView(fakePanes("twin@green:1", "dots:1", "klym:1", "klym@blue:1"), noColor)
+	sel := func() string { return v.rows[v.selected].label }
+
+	steps := []struct {
+		do   func()
+		want string
+	}{
+		{func() {}, "└ @green:1"}, // starts past the leading header
+		{func() { v.move(-1) }, "└ @blue:1"},
+		{func() { v.move(1) }, "└ @green:1"}, // wraps, skipping the header
+		{func() { v.move(1) }, "dots:1"},
+		{func() { v.moveGroup(1) }, "klym:1"},
+		{func() { v.moveGroup(1) }, "└ @green:1"}, // wraps to the first recipe
+		{func() { v.moveGroup(-1) }, "klym:1"},
+	}
+	for i, s := range steps {
+		s.do()
+		if got := sel(); got != s.want {
+			t.Fatalf("step %d: selected %q, want %q", i, got, s.want)
+		}
+	}
+}
+
+func TestScroll(t *testing.T) {
+	v := newView(fakePanes("a:1", "b:1", "c@x:1", "d:1"), noColor)
+	// rows: a:1, b:1, c (header), @x:1, d:1
+	v.selected = 4
+	v.scroll(2)
+	if v.top != 3 {
+		t.Errorf("down to d:1: top %d, want 3", v.top)
+	}
+	v.selected = 3
+	v.scroll(2)
+	if v.top != 2 {
+		t.Errorf("back up to @x:1: top %d, want 2 (its header in view)", v.top)
 	}
 }
