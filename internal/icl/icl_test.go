@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Josef-Hlink/twin/internal/config"
 	"github.com/Josef-Hlink/twin/internal/tmux"
@@ -133,5 +134,39 @@ func TestScroll(t *testing.T) {
 	v.scroll(2)
 	if v.top != 2 {
 		t.Errorf("back up to @x:1: top %d, want 2 (its header in view)", v.top)
+	}
+}
+
+// spinner is Claude's busy line as capture-pane -e returns it mid-pulse, with
+// a color change glued onto the verb's ellipsis.
+const spinner = "\x1b[38;5;174m·\x1b[39m \x1b[38;5;180mDilly-dallying…\x1b[38;5;174m \x1b[38;5;246m(35s · ↓ 3.0k tokens)\x1b[39m\n"
+
+func TestDetectStateWithEscapes(t *testing.T) {
+	if got := detectState(stripANSI(spinner)); got != '*' {
+		t.Errorf("got %q, want busy", got)
+	}
+}
+
+func TestBusyHold(t *testing.T) {
+	var c claudePane
+	t0 := time.Now()
+	idle, menu := "> \n", "1. Yes\n2. No\n"
+
+	steps := []struct {
+		content string
+		after   time.Duration
+		want    byte
+	}{
+		{idle, 0, '-'},
+		{spinner, 0, '*'},
+		{idle, busyHold - time.Second, '*'}, // the hold covers a gap
+		{menu, busyHold - time.Second, '&'}, // but a menu shows straight away
+		{idle, busyHold, '-'},               // and the hold runs out
+	}
+	for i, s := range steps {
+		c.update(s.content, t0.Add(s.after))
+		if c.state != s.want {
+			t.Fatalf("step %d: state %q, want %q", i, c.state, s.want)
+		}
 	}
 }
