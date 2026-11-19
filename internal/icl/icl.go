@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Josef-Hlink/twin/internal/config"
@@ -16,30 +17,52 @@ import (
 	"github.com/Josef-Hlink/twin/internal/tmux"
 )
 
+// refreshEvery is how often the viewer recaptures every pane.
+const refreshEvery = time.Second
+
+// busyHold keeps a pane marked busy for a while after its last busy capture,
+// so a spinner line that's briefly gone between two captures doesn't drop
+// it to idle.
+const busyHold = 3 * time.Second
+
 // claudePane wraps a tmux pane with cached content and detected state.
 type claudePane struct {
 	pane    tmux.Pane
-	label   string // "session:window"
-	content string // captured pane output
-	state   byte   // '*' busy, '&' menu, '-' idle
+	label   string    // "session:window"
+	content string    // captured pane output
+	state   byte      // '*' busy, '&' menu, '-' idle
+	busyAt  time.Time // when a capture last showed it busy
 }
 
 // capture (re)reads the pane's screen and the state it shows.
-func (c *claudePane) capture() {
-	c.content, _ = tmux.CapturePane(c.pane.Target)
-	c.state = detectState(c.content)
+func (c *claudePane) capture(now time.Time) {
+	content, _ := tmux.CapturePane(c.pane.Target)
+	c.update(content, now)
+}
+
+// update takes in a new capture: a busy screen is remembered, and an idle
+// one within busyHold of it still counts as busy. A menu always shows, as
+// it's waiting on you.
+func (c *claudePane) update(content string, now time.Time) {
+	c.content = content
+	c.state = detectState(stripANSI(content))
+	switch {
+	case c.state == '*':
+		c.busyAt = now
+	case c.state == '-' && now.Sub(c.busyAt) < busyHold:
+		c.state = '*'
+	}
 }
 
 const Usage = `usage: twin icl
 
 interactive quickview of running claude agent panes: a sidebar lists them
 all, each recipe's ringers nested under it, next to a preview of the
-selected one.
+selected one, every pane recaptured each second.
   j / down      next session
   k / up        previous session
   J             next recipe
   K             previous recipe
-  r             refresh the selected pane
   Enter         switch to the selected pane
   q / Esc       close
 `
@@ -89,7 +112,7 @@ func RunView() error {
 	for i, p := range panes {
 		label := fmt.Sprintf("%s:%d", p.SessionName, p.WindowIndex)
 		cPanes[i] = claudePane{pane: p, label: label}
-		cPanes[i].capture()
+		cPanes[i].capture(time.Now())
 	}
 
 	// Get popup terminal size via stty.
@@ -110,15 +133,45 @@ func RunView() error {
 		return err
 	}
 	v := newView(cPanes, cfg.Ringers.Color)
-	buf := make([]byte, 16)
+
+	// Reading stdin blocks, so it gets its own goroutine that hands each
+	// read over a channel; the loop below then waits on keys and the
+	// refresh ticker at once with select.
+	keys := make(chan []byte)
+	go func() {
+		for {
+			buf := make([]byte, 16)
+			n, err := os.Stdin.Read(buf)
+			if err != nil {
+				close(keys)
+				return
+			}
+			keys <- buf[:n]
+		}
+	}()
+	ticker := time.NewTicker(refreshEvery)
+	defer ticker.Stop()
+
+	os.Stdout.WriteString(ansiHideCursor)
+	defer os.Stdout.WriteString(ansiShowCursor)
 
 	for {
 		render(os.Stdout, cPanes, v, width, height)
 
-		n, err := os.Stdin.Read(buf)
-		if err != nil {
-			break
+		var buf []byte
+		select {
+		case now := <-ticker.C:
+			for i := range cPanes {
+				cPanes[i].capture(now)
+			}
+			continue
+		case b, ok := <-keys:
+			if !ok {
+				return nil
+			}
+			buf = b
 		}
+		n := len(buf)
 
 		// One read may hold several keys (pasted or sent at once), so walk
 		// them all. Up/down arrive as ESC [ A/B and map onto k/j.
@@ -141,8 +194,6 @@ func RunView() error {
 				tmux.SwitchClient(p.SessionName)
 				tmux.SelectWindow(target)
 				return nil
-			case 'r': // refresh the selected pane's preview and state
-				cPanes[v.current()].capture()
 			case 'j':
 				v.move(1)
 			case 'k':
@@ -154,8 +205,6 @@ func RunView() error {
 			}
 		}
 	}
-
-	return nil
 }
 
 // --- Rows and selection ---
@@ -371,7 +420,18 @@ func termSize() (width, height int) {
 
 var menuLineRe = regexp.MustCompile(`^\s*\d+\.\s`)
 
-// detectState scans the last ~20 lines of captured content to determine pane state.
+// ansiRe matches a CSI escape sequence, such as a color change.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+// stripANSI drops escape sequences, which capture-pane -e keeps. Claude's
+// spinner recolors its verb as it pulses, so "Crunching…" can come out with
+// a color change glued on and no longer end in "ing…".
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
+// detectState scans the last ~20 lines of plain (escape-free) content to
+// determine pane state.
 func detectState(content string) byte {
 	lines := lastLines(content, 20)
 
@@ -423,8 +483,13 @@ const (
 	ansiOrange  = "\033[38;5;214m"
 	ansiReverse = "\033[7m"
 	ansiReset   = "\033[0m"
-	ansiClear   = "\033[2J\033[H" // clear screen + cursor home
+	ansiHome    = "\033[H" // cursor to the top left
+	ansiEOL     = "\033[K" // erase to the end of the line
+	ansiEOS     = "\033[J" // erase to the end of the screen
 	ansiDim     = "\033[2m"
+
+	ansiHideCursor = "\033[?25l"
+	ansiShowCursor = "\033[?25h"
 )
 
 // render draws the full TUI: the session sidebar on the left, the selected
@@ -432,8 +497,10 @@ const (
 func render(w io.Writer, panes []claudePane, v *view, width, height int) {
 	var b strings.Builder
 
-	// Clear screen and move cursor home.
-	b.WriteString(ansiClear)
+	// Draw over the last frame rather than clearing the screen first, which
+	// would flicker on every refresh: each line erases what's left of the
+	// old one past its end.
+	b.WriteString(ansiHome)
 
 	bodyHeight := max(height-1, 1) // all but the status line
 	v.scroll(bodyHeight)
@@ -455,14 +522,14 @@ func render(w io.Writer, panes []claudePane, v *view, width, height int) {
 			b.WriteString(truncVisible(preview[i], previewW))
 			b.WriteString(ansiReset) // prevent color bleed across lines
 		}
-		b.WriteString("\r\n")
+		b.WriteString(ansiEOL + "\r\n")
 	}
 
 	// --- Status line (last line) ---
 	b.WriteString(ansiDim)
-	status := " j/k: session  J/K: recipe  r: refresh  Enter: switch  q: close"
+	status := " j/k: session  J/K: recipe  Enter: switch  q: close"
 	b.WriteString(truncVisible(status, width))
-	b.WriteString(ansiReset)
+	b.WriteString(ansiReset + ansiEOL + ansiEOS)
 
 	w.Write([]byte(b.String()))
 }
