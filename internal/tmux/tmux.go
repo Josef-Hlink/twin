@@ -469,9 +469,10 @@ func SwitchAndKill(to, kill, msg string) error {
 	)...).Run()
 }
 
-// escapeFormat keeps tmux from reading a # in msg as the start of a format.
+// escapeFormat keeps msg literal in display-message, which reads # as the
+// start of a format and runs the whole thing through strftime, so % as well.
 func escapeFormat(msg string) string {
-	return strings.ReplaceAll(msg, "#", "##")
+	return strings.NewReplacer("#", "##", "%", "%%").Replace(msg)
 }
 
 // KillSession kills a single tmux session by name.

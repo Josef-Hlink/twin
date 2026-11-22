@@ -50,6 +50,19 @@ active = ["front", "back", "infra"]
 
 `active` controls which recipes `twin tspmo` spins up.
 
+### Opener
+
+`twin osrs` doesn't open links itself: it runs `opener` through `sh` with the URL on
+stdin (no trailing newline). The default is `xdg-open` on Linux and `open` on macOS.
+Set it when the browser is somewhere else, say on the machine you ssh in from:
+
+```toml
+opener = "my-link-bridge"         # reads the URL on stdin
+# opener = 'firefox "$(cat)"'     # for a program that wants it as an argument
+```
+
+It's a top-level key, so it goes above any `[table]` such as `[ringers]`.
+
 ### Popup colors
 
 Each subcommand that uses a popup picker (`fr`, `sybau`, `pbqt`, `icl`, `ring`, `unring`) has a configurable accent color that paints both the tmux popup border and fzf's pointer/marker, so the picker reads as one themed surface.
@@ -82,6 +95,7 @@ Each recipe is a TOML file in the recipe directory. The filename becomes the ses
 ```toml
 # ~/.config/twin/recipes/front.toml
 start-directory = "~/Developer/pro/my-frontend/"
+url = "http://localhost:3000"
 
 [[windows]]
 name = "editor"
@@ -100,6 +114,8 @@ commands = ["npm install", "make run"]
 ```
 
 - `start-directory` (top-level) is required
+- `url` (top-level, so above the first `[[windows]]`) is optional: the dev server
+  [`twin osrs`](#twin-osrs) opens. It's used as written
 - `start-directory` on a window is relative to the recipe's top-level directory
 - `name = "x"` gives the window a fixed name; without it tmux shows the running
   command (naming a window disables tmux's automatic-rename for it)
@@ -160,6 +176,7 @@ remove = "rmcopy {name} {recipe}"
 force-remove = "rmcopy {name} {recipe} --force"  # optional: what `unring --force` runs
 enter  = "copy-shell {name}"            # optional: every shell in the ringer starts through this
 main   = "copy-shell default {recipe}"  # optional: same, for the recipe's own session
+url    = "https://{recipe}.{name}.example.com"  # optional: a ringer's dev server
 
 [ringers.colors]                         # optional: tint a ringer's session by name
 red = "red"
@@ -179,6 +196,9 @@ red = "red"
   including ones you split by hand later — starts inside the ringer
 - `skip-in-ringers = true` on a recipe window or pane opens it as a plain shell in
   ringers, for setups where copies can't run the dev servers side by side
+- `url` is what `twin osrs` opens in a ringer, for recipes that have a `url` of their
+  own. It replaces that URL as a whole and must contain `{name}`; `{recipe}` works too.
+  Without it ringers have no URL, rather than opening the recipe's own server
 - `[ringers.colors]` tints the session: the status line's foreground, every pane
   border, and heavy border lines, in every window including ones opened later
 - a ringer's session carries the user options `@ringer` (its name) and `@ringer-color`
@@ -234,6 +254,22 @@ bind-key Space run-shell "twin sybau --preview"
 ```
 
 Ringers are listed right under their recipe's session.
+
+### `twin osrs`
+
+> Open Session's Running Server
+
+Open the current session's dev server through the [opener](#opener): the recipe's
+`url`, or in a ringer the [`[ringers] url`](#ringers). A session without one gets a
+message on the status line and nothing is opened. Bind it in `tmux.conf`:
+
+```
+bind-key o run-shell -b "twin osrs || true"
+```
+
+`-b` keeps tmux responsive while the opener runs. `|| true` keeps tmux from covering
+the pane with an exit status when it fails; the reason is on the status line. `o` is
+tmux's next-pane key by default, so this replaces that.
 
 ### `twin ring`
 

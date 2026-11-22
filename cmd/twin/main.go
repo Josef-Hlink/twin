@@ -7,6 +7,7 @@ import (
 	"github.com/Josef-Hlink/twin/internal/fr"
 	"github.com/Josef-Hlink/twin/internal/frfr"
 	"github.com/Josef-Hlink/twin/internal/icl"
+	"github.com/Josef-Hlink/twin/internal/osrs"
 	"github.com/Josef-Hlink/twin/internal/pbqt"
 	"github.com/Josef-Hlink/twin/internal/ring"
 	"github.com/Josef-Hlink/twin/internal/shkspr"
@@ -26,6 +27,7 @@ var helps = map[string]string{
 	"sybau":  sybau.Usage,
 	"pbqt":   pbqt.Usage,
 	"icl":    icl.Usage,
+	"osrs":   osrs.Usage,
 	"shkspr": shkspr.Usage,
 	"tysm":   tysm.Usage,
 	"ring":   ring.Usage,
@@ -79,6 +81,8 @@ func main() {
 		err = icl.Run()
 	case "icl-view":
 		err = icl.RunView()
+	case "osrs":
+		err = osrs.Run(args)
 	case "tysm":
 		err = tysm.Run(args)
 	case "shkspr":
@@ -121,6 +125,7 @@ commands:
   sybau    fzf-based session switcher
   pbqt     kill a tmux session (fzf picker / name)
   icl      quick-glance at running Claude agent panes
+  osrs     open the current session's dev server
   shkspr   open twin.toml in $EDITOR (or a recipe by name)
   tysm     kill tmux server with a farewell
   ring     open a ringer: a named copy of a recipe's session

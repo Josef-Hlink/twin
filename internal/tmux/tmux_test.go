@@ -29,3 +29,10 @@ func TestHookCommand(t *testing.T) {
 		t.Errorf("hookCommand =\n  %s\nwant\n  %s", got, want)
 	}
 }
+
+func TestEscapeFormat(t *testing.T) {
+	got := escapeFormat("no %20b at #{session_name}")
+	if want := "no %%20b at ##{session_name}"; got != want {
+		t.Errorf("escapeFormat() = %q, want %q", got, want)
+	}
+}
