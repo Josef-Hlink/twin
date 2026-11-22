@@ -10,6 +10,7 @@ twin has subcommands:
 - `twin tspmo` — spin up tmux sessions from TOML recipes (the main "opener")
 - `twin fr` — open a single recipe session (fzf picker, by name, or list)
 - `twin sybau` — fzf-based session switcher in a tmux popup (bind to a tmux key)
+- `twin osrs` — open the current session's dev server through the opener command
 - `twin ring` — open a ringer: a named copy of a recipe's session, made real by user-configured commands
 - `twin unring` — drop a ringer: run its remove (or force-remove) command, kill its session
 
@@ -18,6 +19,7 @@ Subcommand names are playful slang-inspired:
 - "tspmo" = this shit pisses me off
 - "fr" = for real
 - "sybau" = shut your bitch ass up
+- "osrs" = on some real shit (open session's running server)
 - "ring" / "unring" are the exception: plain words. A ringer is a dead ringer of a
   session, and the verbs just say what they do
 
@@ -38,6 +40,8 @@ twin/
       fr.go             # single recipe opener (fzf picker / name / --list)
     sybau/
       sybau.go          # fzf session picker in tmux popup
+    osrs/
+      osrs.go           # open the session's dev server
     ring/
       ring.go           # open (and create) a ringer
     unring/
@@ -82,6 +86,9 @@ max-options = 10
 # if omitted, tspmo prompts the user.
 auto-attach-to = "front"
 
+# optional: what osrs pipes the URL to (default: xdg-open, or open on macOS)
+opener = "my-link-bridge"
+
 # optional: ringers (see `twin ring`). twin only does the session side; these
 # commands make a copy real, however this machine does that.
 [ringers]
@@ -92,6 +99,7 @@ remove = "rmcopy {name} {recipe}"
 force-remove = "rmcopy {name} {recipe} --force" # optional: what unring --force runs
 enter  = "copy-shell {name}"           # optional: tmux default-command of a ringer's session
 main   = "copy-shell default {recipe}" # optional: the same for a recipe's own session
+url    = "https://{recipe}.{name}.example.com" # optional: a ringer's dev server
 
 [ringers.colors]                        # optional: tint per ringer name
 red = "red"
@@ -105,6 +113,7 @@ only `{recipe}` and `{repo}` are set.
 **Recipe files** (e.g. `~/.config/twin/recipes/front.toml`):
 ```toml
 start-directory = "~/Developer/pro/my-frontend/"
+url = "http://localhost:3000"  # optional: the dev server, for osrs
 
 [[windows]]
 name = "editor"             # optional fixed window name
@@ -195,6 +204,11 @@ popup shell doesn't inherit PATH context.
 - `twin shkspr <recipe>` — open `<recipe-dir>/<recipe>.toml` (a trailing `.toml` is trimmed, so `dots` and `dots.toml` are equivalent)
 - `twin shkspr .` — open the recipe named after the currently attached tmux session (errors outside tmux); in a ringer (`twin@blue`) that's its recipe
 - Opening a recipe name that doesn't exist yet drops you into the editor on a fresh file — a quick way to start a new recipe
+
+**`twin osrs`** — open the current session's dev server:
+- a recipe's session uses the recipe's `url` as written; a ringer uses `[ringers] url` (must contain `{name}`), only when its recipe has a `url`, and never falls back to the recipe's
+- the URL goes to `opener` (top-level in twin.toml, run through `sh`) on stdin without a newline; the defaults wrap `xdg-open` / `open`, which only take an argument
+- no URL: status-line message, exit 0. A failure: status-line message, exit 1. Nothing on stdout, which run-shell would show over the pane
 
 **`twin ring [<recipe>@]<name> [branch] [--no-attach]`** — open a ringer, session `<recipe>@<name>`:
 - `<recipe>` defaults to the current session's recipe (`blue` inside `twin@red` means `twin@blue`)
