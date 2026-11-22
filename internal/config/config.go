@@ -18,6 +18,7 @@ type Config struct {
 	MaxOptions        *int     `toml:"max-options"`
 	AutoAttachTo      string   `toml:"auto-attach-to"`
 	TysmMsg           string   `toml:"tysm-msg"`
+	Opener            string   `toml:"opener"` // gets osrs's URL on stdin
 	FrBorderColor     string   `toml:"fr-border-color"`
 	SybauBorderColor  string   `toml:"sybau-border-color"`
 	PbqtBorderColor   string   `toml:"pbqt-border-color"`
@@ -113,6 +114,7 @@ func (p Pane) Cmds() []string { return chooseCommands(p.Command, p.Commands) }
 // Recipe represents a single recipe TOML file.
 type Recipe struct {
 	StartDirectory string   `toml:"start-directory"`
+	URL            string   `toml:"url"` // optional: the dev server, for osrs
 	Windows        []Window `toml:"windows"`
 }
 
@@ -205,6 +207,7 @@ func TemplatePath(recipeDir string) string {
 
 // templateContent is the body of the scaffolded template.toml.
 const templateContent = `start-directory = "~/"
+# url = "http://localhost:3000"             # optional dev server, for twin osrs
 
 [[windows]]
 # name = "editor"                           # optional fixed window name

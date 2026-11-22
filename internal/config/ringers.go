@@ -19,6 +19,7 @@ type Ringers struct {
 	ForceRemove string            `toml:"force-remove"` // optional: what unring --force runs instead of Remove
 	Enter       string            `toml:"enter"`        // optional: every shell in a ringer starts through it
 	Main        string            `toml:"main"`         // optional: same, for the recipe's own session
+	URL         string            `toml:"url"`          // optional: a ringer's dev server, for osrs; must use {name}
 	Colors      map[string]string `toml:"colors"`       // optional: tint per ringer name
 }
 
@@ -67,6 +68,19 @@ func (r Ringers) Color(name string) Color {
 // then a leading ~ and $VARS are expanded.
 func (r Ringers) DirFor(v Vars) string {
 	return ExpandPath(expand(r.Dir, v.values(""), false))
+}
+
+// URLFor expands the url template for one ringer; "" when there is none.
+// Like dir it isn't shell-quoted: it's never part of a command line.
+func (r Ringers) URLFor(v Vars) (string, error) {
+	if r.URL == "" {
+		return "", nil
+	}
+	// Checked here and not in Validate, so a bad url can't stop ring.
+	if !strings.Contains(r.URL, "{name}") {
+		return "", fmt.Errorf("[ringers] url must contain {name}, got %q", r.URL)
+	}
+	return expand(r.URL, v.values(""), false), nil
 }
 
 // Command expands a command template (create, remove, force-remove, enter)
